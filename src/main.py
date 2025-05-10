@@ -28,15 +28,19 @@ try:
 
     # Añadir la nueva importación para el lexer de Pascal
     from analizador_lexico.lexer_pascal import LexerPascal
-    # Asumimos que la clase Token es la misma o LexerPascal usa su propia definición interna
-    # y que TT_ERROR_PASCAL y TT_EOF_PASCAL están definidos en lexer_pascal.py
     from analizador_lexico.lexer_pascal import TT_ERROR_PASCAL, TT_EOF_PASCAL
 
-    # Parser para Pascal (NUEVA IMPORTACIÓN)
+    # Importaciones para el Lexer de T-SQL
+    from analizador_lexico.lexer_tsql import LexerTSQL
+    from analizador_lexico.lexer_tsql import TT_ERROR_SQL, TT_EOF_SQL
+    
+
+    # Parser para Pascal 
     from analizador_sintactico.parser_pascal import ParserPascal
 
-        # --- NUEVA IMPORTACIÓN PARA EL INTÉRPRETE ---
+        # IMPORTACIÓN PARA INTÉRPRETE PASCAL
     from simulador_ejecucion.interprete_pascal import InterpretePascal
+
 except ImportError:
 
     # Este bloque es para ayudar si la ejecución directa de src/main.py causa problemas de importación
@@ -210,7 +214,7 @@ def analizar_archivo_y_mostrar(ruta_archivo):
 
                         if ast_generado_pascal:
                             print("\n--- Árbol de Sintaxis Abstracto (AST) Generado (Pascal) ---")
-                            print(ast_generado_pascal) # Imprime usando los __repr__ de los nodos
+                            #print(ast_generado_pascal) # Imprime usando los __repr__ de los nodos
                             print("--- Fin del AST (Pascal) ---")
 
                             # --- INICIO DE LA LLAMADA AL INTÉRPRETE ---
@@ -229,6 +233,35 @@ def analizar_archivo_y_mostrar(ruta_archivo):
                         # import traceback
                         # traceback.print_exc()
                         print("--- Fin Procesamiento Pascal ---") # Mensaje general para el bloque Pascal
+
+        elif lenguaje_detectado == "T-SQL":
+            print("\n--- Análisis Léxico (T-SQL) ---")
+            if not codigo_completo_str.strip():
+                print("El código T-SQL para el análisis léxico está vacío.")
+            else:
+                try:
+                    lexer_tsql = LexerTSQL(codigo_completo_str)
+                    tokens_obtenidos = lexer_tsql.tokenizar()
+                    
+                    print(f"Total de tokens generados (T-SQL): {len(tokens_obtenidos)}")
+                    tiene_errores_lexicos_tsql = False
+                    for i, token_obj in enumerate(tokens_obtenidos):
+                        print(f"  {i+1:03d}: {token_obj}") 
+                        if token_obj.tipo == TT_ERROR_SQL:
+                            tiene_errores_lexicos_tsql = True
+                    
+                    if tiene_errores_lexicos_tsql:
+                        print(">>> Se encontraron errores léxicos en el código T-SQL. <<<")
+                    elif tokens_obtenidos and tokens_obtenidos[-1].tipo == TT_EOF_SQL:
+                        print(">>> Análisis léxico de T-SQL completado sin errores aparentes (finalizado con EOF). <<<")
+                    else:
+                        print(">>> Problema con la salida del lexer de T-SQL (no finalizó con EOF o no generó tokens). <<<")
+
+                except Exception as e_lex_tsql:
+                    print(f"ERROR SEVERO durante el análisis léxico de T-SQL: {e_lex_tsql}")
+                    # import traceback # Descomentar si se necesita el traceback completo aquí.
+                    # traceback.print_exc()
+            print("--- Fin Análisis Léxico (T-SQL) ---")
         
         # Opcional: Mostrar las pistas activadas para depuración
         # print("Pistas activadas (debug):")
