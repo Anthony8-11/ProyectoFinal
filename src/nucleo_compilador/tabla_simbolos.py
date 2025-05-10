@@ -8,6 +8,7 @@ class TablaSimbolos:
         donde cada diccionario representa un alcance.
         """
         self.alcances = [{}]  # Pila de diccionarios, el primero es el global
+        print(f"[DEBUG TablaSimbolos.__init__] Nueva instancia de TablaSimbolos creada. id(self)={id(self)}, id(self.alcances[0])={id(self.alcances[0])}")
 
     def entrar_alcance(self):
         """
@@ -29,50 +30,51 @@ class TablaSimbolos:
             # si se intenta salir del alcance global.
             print("Advertencia: Intento de salir del alcance global.")
 
-    def agregar_simbolo(self, nombre, tipo_dato, rol, valor=None, 
-                        inicializado=False, utilizado=False, 
-                        parametros=None, tipo_retorno=None, 
-                        linea=None, columna=None):
-        """
-        Agrega un nuevo símbolo al alcance actual (el diccionario en la cima de la pila).
+    def agregar_simbolo(self, nombre, tipo_dato, rol, linea=None, columna=None, valor=None, info_extra=None):
+        # Mensaje de depuración inicial
+        print(f"[DEBUG TS.agregar_simbolo] INICIO: nombre='{nombre}', tipo_dato='{tipo_dato}', rol='{rol}', linea={linea}")
 
-        Args:
-            nombre (str): El nombre del identificador.
-            tipo_dato (str): El tipo de dato del símbolo (ej: 'int', 'string', 'function').
-            rol (str): El papel del símbolo (ej: 'variable', 'constante', 'funcion').
-            valor: El valor del símbolo (si es una constante o para simulación).
-            inicializado (bool): Si el símbolo ha sido inicializado.
-            utilizado (bool): Si el símbolo ha sido utilizado.
-            parametros (list): Lista de parámetros si es una función/procedimiento.
-            tipo_retorno (str): Tipo de retorno si es una función.
-            linea (int): Número de línea donde se declara el símbolo.
-            columna (int): Número de columna donde se declara el símbolo.
-
-        Returns:
-            bool: True si el símbolo se agregó con éxito, False si ya existe en el alcance actual.
-        """
-        alcance_actual = self.alcances[-1]
-        if nombre in alcance_actual:
-            # Manejo de re-declaración. Dependiendo del lenguaje, esto podría
-            # ser un error semántico que se reporte más tarde.
-            # Por ahora, simplemente no lo agregamos y podríamos imprimir una advertencia.
-            print(f"Advertencia/Error de Tabla de Símbolos: El símbolo '{nombre}' ya está declarado en el alcance actual (línea: {linea}).")
-            # Podríamos añadir información del símbolo existente para más claridad.
-            return False
+        # Asegurar que self.alcances exista y tenga al menos un alcance (el global).
+        # Esto es una salvaguarda; __init__ debería haber creado el alcance global.
+        if not self.alcances:
+            print("[DEBUG TS.agregar_simbolo] 'self.alcances' estaba vacío. Creando alcance global [{}]).")
+            self.alcances = [{}] # Inicializa o re-inicializa como una lista con un dict vacío.
+            if not self.alcances: # No debería fallar, pero por si acaso.
+                print("[DEBUG TS.agregar_simbolo] CRÍTICO: No se pudo inicializar 'self.alcances'. No se puede agregar.")
+                return False
         
-        alcance_actual[nombre] = {
-            'nombre': nombre, # Guardamos el nombre también para facilitar la recuperación
+        # Trabajar directamente con el primer diccionario en la lista self.alcances (alcance global).
+        # Asumimos que para las declaraciones 'var' del programa principal, siempre es self.alcances[0].
+        alcance_global_para_agregar = self.alcances[0] 
+        
+        print(f"[DEBUG TS.agregar_simbolo] ID del objeto self.alcances[0]: {id(self.alcances[0])}")
+        print(f"[DEBUG TS.agregar_simbolo] Contenido de self.alcances[0] ANTES de verificar re-declaración: {alcance_global_para_agregar}")
+
+        if nombre in alcance_global_para_agregar: 
+            print(f"[DEBUG TS.agregar_simbolo] '{nombre}' YA EXISTE en self.alcances[0].")
+            print(f"Error Semántico (TablaSimbolos): El símbolo '{nombre}' ya está declarado en el alcance global "
+                  f"(declarado previamente en L{alcance_global_para_agregar.get(nombre, {}).get('linea', '?')}). "
+                  f"No se puede re-declarar en L{linea}.")
+            return False 
+        
+        print(f"[DEBUG TS.agregar_simbolo] '{nombre}' NO existe en self.alcances[0]. Procediendo a agregar.")
+
+        entrada_simbolo = {
             'tipo_dato': tipo_dato,
             'rol': rol,
+            'linea': linea,
+            'columna': columna,
             'valor': valor,
-            'inicializado': inicializado,
-            'utilizado': utilizado,
-            'parametros': parametros if parametros is not None else [],
-            'tipo_retorno': tipo_retorno,
-            'linea_declaracion': linea,
-            'columna_declaracion': columna,
-            'alcance_nivel': len(self.alcances) -1 # Nivel de anidamiento del alcance
+            'alcance_nivel': 0, # Asumiendo que este es el alcance global (nivel 0)
+            'info_extra': info_extra if info_extra is not None else {}
         }
+        
+        # Modificación directa del diccionario en la lista self.alcances.
+        self.alcances[0][nombre] = entrada_simbolo
+        
+        print(f"[DEBUG TS.agregar_simbolo] Símbolo '{nombre}' AGREGADO a self.alcances[0].")
+        print(f"[DEBUG TS.agregar_simbolo] Contenido de self.alcances[0] DESPUÉS de agregar: {self.alcances[0]}")
+        print(f"[DEBUG TS.agregar_simbolo] Contenido COMPLETO de self.alcances DESPUÉS de agregar: {self.alcances}")
         return True
 
     def buscar_simbolo(self, nombre):
@@ -140,3 +142,16 @@ class TablaSimbolos:
             for nombre_simbolo, detalles_simbolo in alcance.items():
                 representacion += f"    - '{nombre_simbolo}': {detalles_simbolo}\n"
         return representacion
+    
+
+    def buscar_simbolo_en_alcance_actual(self, nombre):
+        """
+        Busca un símbolo únicamente en el alcance actual (el diccionario en la cima de la pila).
+        Devuelve: El diccionario del símbolo si se encuentra en el alcance actual, o None si no.
+        """
+        if not self.alcances:
+            # Esto no debería ocurrir si la tabla siempre se inicializa con al menos un alcance.
+            return None 
+        
+        alcance_actual = self.alcances[-1] # Obtiene el diccionario del alcance más interno (actual).
+        return alcance_actual.get(nombre, None) # Usa .get() para devolver None si la clave no existe.

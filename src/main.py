@@ -34,6 +34,9 @@ try:
 
     # Parser para Pascal (NUEVA IMPORTACIÓN)
     from analizador_sintactico.parser_pascal import ParserPascal
+
+        # --- NUEVA IMPORTACIÓN PARA EL INTÉRPRETE ---
+    from simulador_ejecucion.interprete_pascal import InterpretePascal
 except ImportError:
 
     # Este bloque es para ayudar si la ejecución directa de src/main.py causa problemas de importación
@@ -52,7 +55,8 @@ except ImportError:
 
 def analizar_archivo_y_mostrar(ruta_archivo):
     """
-    Lee un archivo, detecta su lenguaje y muestra los resultados.
+    Analiza un archivo de código: detecta el lenguaje, realiza análisis léxico
+    y, si es Pascal, también análisis sintáctico y muestra el AST.
     """
     try:
         # Usar 'errors='ignore'' puede ocultar problemas de codificación,
@@ -156,76 +160,75 @@ def analizar_archivo_y_mostrar(ruta_archivo):
         elif lenguaje_detectado == "Pascal":
                 print("\n--- Análisis Léxico (Pascal) ---")
                 codigo_completo_str = "".join(lineas_codigo)
-
+                ast_generado_pascal = None
+                parser_pascal_instancia = None # Para acceder a la tabla de símbolos si es necesario
                 if not codigo_completo_str.strip():
-                    print("El código Pascal para el análisis léxico está vacío o solo contiene espacios/saltos de línea.")
+                    print("El código Pascal para el análisis léxico está vacío.")
                 else:
                     try:
-                        # --- Inicio del Análisis Léxico de Pascal (como estaba antes) ---
                         lexer_pas = LexerPascal(codigo_completo_str)
                         tokens_obtenidos = lexer_pas.tokenizar()
-                        
                         print(f"Total de tokens generados (Pascal): {len(tokens_obtenidos)}")
                         tiene_errores_lexicos_pascal = False
+                        # (Opcional: imprimir tokens)
                         for i, token_obj in enumerate(tokens_obtenidos):
-                            print(f"  {i+1:03d}: {token_obj}") 
-                            if token_obj.tipo == TT_ERROR_PASCAL:
-                                tiene_errores_lexicos_pascal = True
+                             print(f"  {i+1:03d}: {token_obj}")
+                             if token_obj.tipo == TT_ERROR_PASCAL:
+                                 tiene_errores_lexicos_pascal = True
                         
-                        mensaje_lexico = ""
+                        # Verificar errores léxicos de forma más simple
+                        if any(t.tipo == TT_ERROR_PASCAL for t in tokens_obtenidos):
+                            tiene_errores_lexicos_pascal = True
+                        
+                        mensaje_lexico_pascal = ""
                         if tiene_errores_lexicos_pascal:
-                            mensaje_lexico = ">>> Se encontraron errores léxicos en el código Pascal. <<<"
+                            mensaje_lexico_pascal = ">>> Se encontraron errores léxicos en el código Pascal. <<<"
                         elif tokens_obtenidos and tokens_obtenidos[-1].tipo == TT_EOF_PASCAL:
-                            mensaje_lexico = ">>> Análisis léxico de Pascal completado sin errores aparentes (finalizado con EOF). <<<"
-                        elif not tokens_obtenidos:
-                             mensaje_lexico = ">>> No se generaron tokens Pascal (posiblemente código vacío o solo comentarios/espacios). <<<"
+                            mensaje_lexico_pascal = ">>> Análisis léxico de Pascal completado sin errores aparentes (finalizado con EOF). <<<"
                         else:
-                            mensaje_lexico = f">>> Análisis léxico de Pascal finalizado, pero el último token no es EOF (último: {tokens_obtenidos[-1].tipo if tokens_obtenidos else 'N/A'}). <<<"
-                        print(mensaje_lexico)
-                        # --- Fin del Análisis Léxico de Pascal ---
+                            mensaje_lexico_pascal = ">>> Problema con la salida del lexer de Pascal (no EOF o sin tokens). <<<"
+                        print(mensaje_lexico_pascal)
 
-                        # --- INICIO DEL BLOQUE DE ANÁLISIS SINTÁCTICO PARA PASCAL ---
-                        # Solo intentar el análisis sintáctico si el léxico fue exitoso (sin errores y con EOF)
                         if not tiene_errores_lexicos_pascal and \
-                           tokens_obtenidos and \
-                           tokens_obtenidos[-1].tipo == TT_EOF_PASCAL:
+                        tokens_obtenidos and \
+                        tokens_obtenidos[-1].tipo == TT_EOF_PASCAL:
                             
                             print("\n--- Análisis Sintáctico (Pascal) ---")
+                            # La impresión de depuración de la tabla de símbolos ya está en ParserPascal.parse_bloque
                             try:
-                                # Se crea una instancia del parser con la lista de tokens (ya filtrada de whitespace por el ParserPascal en su __init__)
-                                parser_pas = ParserPascal(tokens_obtenidos) 
-                                # El método parse() internamente llamará a _error_sintactico que lanza SyntaxError
-                                # y también imprime mensajes de éxito o fallo.
-                                resultado_parseo_exitoso = parser_pas.parse() 
-                                
-                                # El método parse() ya debería haber impreso si fue exitoso o los errores.
-                                # Aquí solo confirmamos que el proceso de llamada al parser terminó.
-                                # if resultado_parseo_exitoso:
-                                # print("El parser de Pascal finalizó su ejecución (ver mensajes anteriores para el resultado).")
-                                # else:
-                                # print("El parser de Pascal finalizó su ejecución con errores (ver mensajes anteriores).")
-
+                                parser_pascal_instancia = ParserPascal(tokens_obtenidos)
+                                ast_generado_pascal = parser_pascal_instancia.parse() 
+                                # Los mensajes de éxito/error del parsing ya se imprimen dentro de parser_pascal_instancia.parse()
                             except Exception as e_parse_pascal:
-                                # Captura errores inesperados dentro de la lógica del parser,
-                                # no errores sintácticos del código fuente (esos los maneja _error_sintactico).
                                 print(f"ERROR CRÍTICO en la ejecución del Parser de Pascal: {e_parse_pascal}")
-                                import traceback
-                                traceback.print_exc()
-                        elif tiene_errores_lexicos_pascal:
+                                # import traceback # traceback ya está importado arriba si es necesario
+                                # traceback.print_exc()
+                        else:
                             print("\n--- Análisis Sintáctico (Pascal) ---")
-                            print("No se realizó el análisis sintáctico debido a errores léxicos previos.")
-                        else: # No hay tokens o no terminó en EOF
-                            print("\n--- Análisis Sintáctico (Pascal) ---")
-                            print("No se realizó el análisis sintáctico (problema con la lista de tokens del lexer).")
+                            print("No se realizó el análisis sintáctico debido a errores léxicos o problemas con tokens.")
                         print("--- Fin Análisis Sintáctico (Pascal) ---")
-                        # --- FIN DEL BLOQUE DE ANÁLISIS SINTÁCTICO ---
 
-                    except Exception as e_lex_pascal:
-                        # Este error es del lexer
-                        print(f"ERROR SEVERO durante el análisis léxico de Pascal: {e_lex_pascal}")
-                        import traceback
-                        traceback.print_exc()
-                print("--- Fin Análisis Léxico (Pascal) ---")
+                        if ast_generado_pascal:
+                            print("\n--- Árbol de Sintaxis Abstracto (AST) Generado (Pascal) ---")
+                            print(ast_generado_pascal) # Imprime usando los __repr__ de los nodos
+                            print("--- Fin del AST (Pascal) ---")
+
+                            # --- INICIO DE LA LLAMADA AL INTÉRPRETE ---
+                            if parser_pascal_instancia and parser_pascal_instancia.tabla_simbolos:
+                                interprete = InterpretePascal(parser_pascal_instancia.tabla_simbolos)
+                                interprete.interpretar(ast_generado_pascal)
+                            else:
+                                print("No se pudo iniciar la simulación: falta la instancia del parser o la tabla de símbolos.")
+                            # --- FIN DE LA LLAMADA AL INTÉRPRETE ---
+                            
+                        elif not tiene_errores_lexicos_pascal and (parser_pascal_instancia is None or not parser_pascal_instancia.errores_sintacticos):
+                            print("\nNo se generó un AST para Pascal, aunque no se reportaron errores explícitos (revisar lógica del parser).")
+
+                    except Exception as e_proc_pascal: # Error general en el procesamiento de Pascal
+                        print(f"ERROR SEVERO durante el procesamiento de Pascal: {e_proc_pascal}")
+                        # import traceback
+                        # traceback.print_exc()
+                        print("--- Fin Procesamiento Pascal ---") # Mensaje general para el bloque Pascal
         
         # Opcional: Mostrar las pistas activadas para depuración
         # print("Pistas activadas (debug):")
@@ -326,33 +329,34 @@ int main(int argc, char *argv[]) {
 }
         """,
         "prueba_pascal.pas": """
-program SaludoCordialPascal;
-uses Crt; (* Libreria para manejo de pantalla *)
-
+program TestLogicos;
 var
-   nombreUsuario : string[50];
-   edad : integer;
-   confirmacion : char;
-
+   a, b : integer;
+   cond1, cond2, resultado_logico : boolean;
+   entrada: char;
+   contador: integer;
 begin
-   clrscr; (* Limpiar pantalla *)
-   writeln('Bienvenido al Sistema de Prueba Pascal.');
-   write('Por favor, ingrese su nombre: ');
-   readln(nombreUsuario);
-   write('Ingrese su edad: ');
-   readln(edad);
+   a := 10;
+   b := 5;
 
-   { Este es un comentario de bloque en Pascal }
-   if edad >= 18 then
-      writeln('Hola ', nombreUsuario, ', usted es mayor de edad.')
-   else
-      writeln('Hola ', nombreUsuario, ', usted es menor de edad.');
+   cond1 := (a > b) and (b > 0);          (* Verdadero and Verdadero -> Verdadero *)
+   cond2 := (a < b) or not (b = 5);       (* Falso or not Verdadero -> Falso or Falso -> Falso *)
+   resultado_logico := cond1 and not cond2; (* Verdadero and not Falso -> Verdadero and Verdadero -> Verdadero *)
 
-   write('¿Desea continuar? (S/N): ');
-   readln(confirmacion);
-   (* Otro comentario *)
-   writeln('Presione cualquier tecla para finalizar...');
-   readkey; (* Esperar una tecla *)
+   writeln('cond1 ( (a > b) and (b > 0) ): ', cond1);
+   writeln('cond2 ( (a < b) or not (b = 5) ): ', cond2);
+   writeln('resultado_logico ( cond1 and not cond2 ): ', resultado_logico);
+
+   writeln('--- Prueba Repeat con OR y AND ---');
+   contador := 0;
+   repeat
+      contador := contador + 1;
+      writeln('Iteracion: ', contador);
+      write('Continuar? (s/n): ');
+      readln(entrada);
+   until (contador >= 3) or ((entrada = 'n') and (contador > 0)); 
+   (* El (contador > 0) es para asegurar que 'and' se evalúe con booleanos *)
+
 end.
         """,
         "prueba_plsql.sql": """

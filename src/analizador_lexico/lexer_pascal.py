@@ -53,14 +53,14 @@ PALABRAS_RESERVADAS_PASCAL = {
     'function', 'procedure', 'uses',
     'integer', 'real', 'char', 'string', 'boolean',
     'true', 'false', 'nil',
-    'div', 'mod', 'and', 'or', 'not', 'in', 'set',
+    'and', 'or', 'not', 'in', 'set',
     'case', 'with', 'goto', 'label',
     # Comandos simples comunes para simulación
     'writeln', 'write', 'readln', 'read'
 }
 
 
-# (Continuación, después de la definición de PALABRAS_RESERVADAS_PASCAL)
+
 
 # Especificaciones de los tokens para Pascal: (expresión_regular, TIPO_TOKEN)
 # El orden es importante para evitar coincidencias incorrectas.
@@ -98,8 +98,10 @@ ESPECIFICACIONES_TOKEN_PASCAL = [
     # Delimitadores y operadores de un solo carácter
     (r'\+',                      TT_OPERADOR_ARITMETICO),
     (r'-',                       TT_OPERADOR_ARITMETICO),
-    (r'\*',                       TT_OPERADOR_ARITMETICO),
+    (r'\*',                      TT_OPERADOR_ARITMETICO),
     (r'/',                       TT_OPERADOR_ARITMETICO), # División real
+    (r'div',                     TT_OPERADOR_ARITMETICO),
+    (r'mod',                     TT_OPERADOR_ARITMETICO),
     (r'=',                       TT_OPERADOR_RELACIONAL),
     (r'<',                       TT_OPERADOR_RELACIONAL),
     (r'>',                       TT_OPERADOR_RELACIONAL),

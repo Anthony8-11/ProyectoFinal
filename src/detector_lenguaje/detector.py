@@ -76,8 +76,6 @@ def detectar_lenguaje(codigo_lineas_o_texto, n_lineas_muestra=20):
                 pistas_activadas_debug["Python"].append("PISTA_FUERTE: PYTHON_DEF_POCOS_O_NINGUN_SEMICOLON")
 
     
-
-
     # --- Aplicar todas las pistas del diccionario PISTAS_LENGUAJE ---
     for pista_regex_str, efectos_lenguaje in PISTAS_LENGUAJE.items():
         try:
@@ -99,8 +97,6 @@ def detectar_lenguaje(codigo_lineas_o_texto, n_lineas_muestra=20):
             continue
 
     
-
-
     # --- Lógica de refinamiento post-pistas ---
     # Analizar características más generales del código para ajustar puntuaciones.
 
@@ -155,8 +151,6 @@ def detectar_lenguaje(codigo_lineas_o_texto, n_lineas_muestra=20):
         pistas_activadas_debug.setdefault("REFINAMIENTO_GLOBAL", []).append(f"LLAVES_BALANCEADAS_EN_MUESTRA (abiertas: {llaves_abiertas})")
 
     
-
-
     # --- Determinar el lenguaje ganador ---
     
     # Poner un suelo a las puntuaciones (ej. 0) para que no haya negativos al final,
@@ -184,8 +178,6 @@ def detectar_lenguaje(codigo_lineas_o_texto, n_lineas_muestra=20):
         # Esto no debería ocurrir si ya pasamos el chequeo de 'any(p > 0 ...)'
         # pero es una salvaguarda. Si el ganador tiene 0 y el total es 0.
         certeza_porcentaje = 0
-
-
 
 
     # --- Umbrales de confianza ---
