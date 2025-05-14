@@ -13,108 +13,102 @@ class Token:
         self.lexema = lexema      # El texto actual del token (ej: "CREATE", "nombre_tabla")
         self.linea = linea        # Número de línea donde aparece el token
         self.columna = columna    # Número de columna donde comienza el token
-        self.valor = valor if valor is not None else lexema # Valor real (ej: 123 para "123")
+        # El valor real (ej: 123 para "123", o el contenido de una cadena sin comillas).
+        # Si no se provee un valor, se usa el lexema.
+        self.valor = valor if valor is not None else lexema 
 
     def __repr__(self):
         # Representación en cadena del token, útil para depuración.
         # Escapa saltos de línea y retornos de carro para una mejor visualización.
         lexema_display = self.lexema.replace('\n', '\\n').replace('\r', '\\r')
-        valor_display = str(self.valor).replace('\n', '\\n').replace('\r', '\\r')
+        # Usar repr() para el valor asegura que las cadenas se muestren con sus comillas, etc.
+        valor_repr = repr(self.valor) if self.valor != self.lexema and self.valor is not None else ""
+        
         return (f"Token({self.tipo}, '{lexema_display}', "
                 f"L{self.linea}:C{self.columna}" +
-                (f", V:{repr(valor_display)}" if self.valor != self.lexema and self.valor is not None else "") + ")")
+                (f", V:{valor_repr}" if valor_repr else "") + ")")
 
 # Tipos de Token para T-SQL / SQL
-TT_PALABRA_CLAVE = 'PALABRA_CLAVE'  # CREATE, TABLE, SELECT, INSERT, UPDATE, DELETE, FROM, WHERE, SET, VALUES, INTO, etc.
-TT_IDENTIFICADOR = 'IDENTIFICADOR'  # Nombres de tablas, columnas, etc.
-TT_TIPO_DATO = 'TIPO_DATO'          # VARCHAR, INT, DECIMAL, DATETIME, etc. (Podrían ser también PALABRA_CLAVE)
+TT_PALABRA_CLAVE = 'PALABRA_CLAVE'
+TT_IDENTIFICADOR = 'IDENTIFICADOR'
+# TT_TIPO_DATO = 'TIPO_DATO' # Se tratarán como PALABRA_CLAVE por ahora
 
-TT_LITERAL_CADENA = 'LITERAL_CADENA' # 'esto es una cadena'
-TT_LITERAL_NUMERICO = 'LITERAL_NUMERICO' # 123, 45.67
-TT_LITERAL_FECHA = 'LITERAL_FECHA'   # Podría ser un tipo de cadena especial, ej: '2025-05-10'
+TT_LITERAL_CADENA = 'LITERAL_CADENA'
+TT_LITERAL_NUMERICO = 'LITERAL_NUMERICO'
+# TT_LITERAL_FECHA = 'LITERAL_FECHA' # Podría ser un tipo de cadena especial
 
-TT_OPERADOR_COMPARACION = 'OPERADOR_COMPARACION' # =, <, >, <=, >=, <>, !=
-TT_OPERADOR_ARITMETICO = 'OPERADOR_ARITMETICO' # +, -, *, / (menos común en DDL/DML básico)
-TT_OPERADOR_LOGICO = 'OPERADOR_LOGICO'     # AND, OR, NOT (a menudo como palabras clave)
-TT_OPERADOR_ASIGNACION = 'OPERADOR_ASIGNACION' # = (en sentencias SET)
+TT_OPERADOR_COMPARACION = 'OPERADOR_COMPARACION'
+TT_OPERADOR_ARITMETICO = 'OPERADOR_ARITMETICO'
+# TT_OPERADOR_LOGICO = 'OPERADOR_LOGICO' # AND, OR, NOT son palabras clave
+# TT_OPERADOR_ASIGNACION = 'OPERADOR_ASIGNACION' # = en SET
 
-TT_PARENTESIS_IZQ = 'PARENTESIS_IZQ' # (
-TT_PARENTESIS_DER = 'PARENTESIS_DER' # )
-TT_COMA = 'COMA'                     # ,
-TT_PUNTO_Y_COMA = 'PUNTO_Y_COMA'     # ; (Terminador de sentencia, a veces opcional)
-TT_PUNTO = 'PUNTO'                   # . (Para nombres calificados, ej: tabla.columna)
-TT_ASTERISCO = 'ASTERISCO'           # * (Para SELECT *)
+TT_PARENTESIS_IZQ = 'PARENTESIS_IZQ'
+TT_PARENTESIS_DER = 'PARENTESIS_DER'
+TT_COMA = 'COMA'
+TT_PUNTO_Y_COMA = 'PUNTO_Y_COMA'
+TT_PUNTO = 'PUNTO'
+TT_ASTERISCO = 'ASTERISCO'
 
-TT_COMENTARIO_LINEA = 'COMENTARIO_LINEA' # -- Esto es un comentario
-TT_COMENTARIO_BLOQUE = 'COMENTARIO_BLOQUE' # /* Esto es un comentario */
+TT_COMENTARIO_LINEA = 'COMENTARIO_LINEA'
+TT_COMENTARIO_BLOQUE = 'COMENTARIO_BLOQUE'
 
-TT_EOF_SQL = 'EOF_SQL'               # Fin de archivo/entrada
-TT_ERROR_SQL = 'ERROR_SQL'           # Token para errores léxicos
-TT_WHITESPACE_SQL = 'WHITESPACE_SQL'   # Espacios, tabs, nuevas líneas (generalmente se ignoran)
+TT_EOF_SQL = 'EOF_SQL'
+TT_ERROR_SQL = 'ERROR_SQL'
+TT_WHITESPACE_SQL = 'WHITESPACE_SQL'
 
-# Palabras clave comunes de SQL (T-SQL)
-# T-SQL es generalmente insensible a mayúsculas/minúsculas para palabras clave e identificadores.
-# El lexer las identificará y el parser/intérprete las tratará de forma insensible si es necesario.
 PALABRAS_CLAVE_SQL = {
     'create', 'table', 'insert', 'into', 'values', 'select', 'from', 'where',
     'update', 'set', 'delete', 'and', 'or', 'not', 'null', 'primary', 'key',
     'varchar', 'int', 'integer', 'decimal', 'numeric', 'datetime', 'char', 'text',
-    'nvarchar', 'float', 'real', 'bit', 'date', 'time',
-    'alter', 'drop', 'add', 'constraint', 'foreign', 'references', 'default',
-    'order', 'by', 'asc', 'desc', 'group', 'having', 'distinct', 'top',
+    'nvarchar', 'float', 'real', 'bit', 'date', 'time', 'money', 'smallint', 'tinyint',
+    'alter', 'drop', 'add', 'constraint', 'foreign', 'references', 'default', 'unique', 'check',
+    'index', 'view', 'database', 'schema', 'identity', 'on', 'off',
+    'order', 'by', 'asc', 'desc', 'group', 'having', 'distinct', 'top', 'percent',
     'begin', 'end', 'if', 'else', 'while', 'declare', 'as', 'exec', 'execute',
-    'procedure', 'function', 'trigger', 'go' # GO es específico de T-SQL para lotes
+    'procedure', 'function', 'trigger', 'go', 'union', 'all', 'exists', 'case', 'when', 'then',
+    'join', 'inner', 'left', 'right', 'outer', 'full', 'is', 'like', 'between', 'nulls', 'first', 'last',
+    'current_timestamp', 'getdate' # Ejemplos de funciones comunes
 }
 
-# Podríamos tener un conjunto separado para tipos de datos si queremos distinguirlos
-# léxicamente, o tratarlos como PALABRA_CLAVE y que el parser determine su rol.
-# Por simplicidad, muchos tipos de datos están en PALABRAS_CLAVE_SQL.
-# Si quisiéramos TT_TIPO_DATO explícito del lexer:
-TIPOS_DATO_SQL = {
-    'varchar', 'int', 'integer', 'decimal', 'numeric', 'datetime', 'char', 'text',
-    'nvarchar', 'float', 'real', 'bit', 'date', 'time'
-}
+# Los tipos de dato SQL se incluyen en PALABRAS_CLAVE_SQL para simplificar.
+# El parser determinará su rol contextual.
 
-# Especificaciones de los tokens para T-SQL/SQL.
-# El orden es importante: las palabras clave deben buscarse después de los identificadores
-# o manejar la insensibilidad a mayúsculas/minúsculas al verificar si un identificador es palabra clave.
-# Aquí, definiremos patrones para componentes y luego una lógica para clasificar.
 ESPECIFICACIONES_TOKEN_SQL = [
-    # Comentarios
-    (r'--[^\n]*', TT_COMENTARIO_LINEA),    # Comentario de línea SQL: -- hasta el final de la línea
-    (r'/\*[\s\S]*?\*/', TT_COMENTARIO_BLOQUE), # Comentario de bloque SQL: /* ... */ (no anidado)
+    # Comentarios (deben ir primero para que no interfieran con otros patrones como '/')
+    (r'--[^\n\r]*', TT_COMENTARIO_LINEA),      # Comentario de línea: -- hasta el final
+    (r'/\*[\s\S]*?\*/', TT_COMENTARIO_BLOQUE), # Comentario de bloque: /* ... */ (no anidado)
 
-    # Literales
-    (r"'[^']*'(?:''[^']*')*", TT_LITERAL_CADENA), # Cadenas: 'texto', 'texto con '' comilla simple'
-    # (r'"[^"]*"(?:""[^"]*")*', TT_LITERAL_CADENA_DOBLE_COMILLA), # Si se soportan comillas dobles para cadenas
-    
+    # Literales de cadena (entre comillas simples, '' para escapar una comilla simple)
+    (r"'[^']*'(?:''[^']*')*", TT_LITERAL_CADENA), 
+
     # Números: decimales y enteros.
-    # Un número puede tener un punto decimal, y opcionalmente un exponente.
-    # También puede tener un signo + o - al inicio.
-    (r'[+-]?\d+\.\d*([eE][+-]?\d+)?', TT_LITERAL_NUMERICO), # Decimales: 1.0, .5, 1.2E-5
-    (r'[+-]?\d+([eE][+-]?\d+)?', TT_LITERAL_NUMERICO),      # Enteros (con posible exponente): 123, 1e5
+    # Permite signo opcional, punto decimal, y notación científica (e/E).
+    (r'[+-]?\d+\.\d*([eE][+-]?\d+)?', TT_LITERAL_NUMERICO), # Decimales: 1.0, .5, 1.2E-5, +3.0, -0.5
+    (r'[+-]?\d+([eE][+-]?\d+)?', TT_LITERAL_NUMERICO),      # Enteros: 123, 1e5, +100, -20
 
-    # Operadores y Delimitadores
+    # Operadores de comparación
     (r'<>|!=|>=|<=|=|<|>', TT_OPERADOR_COMPARACION),
-    (r'[\+\-\*\/%]', TT_OPERADOR_ARITMETICO), # % para módulo en T-SQL
     
+    # Operadores aritméticos
+    (r'[\+\-\*\/%]', TT_OPERADOR_ARITMETICO), # % es módulo en T-SQL
+
+    # Delimitadores y símbolos especiales
     (r'\(', TT_PARENTESIS_IZQ),
     (r'\)', TT_PARENTESIS_DER),
     (r',', TT_COMA),
     (r';', TT_PUNTO_Y_COMA),
-    (r'\.', TT_PUNTO),      # Para nombres calificados: database.schema.table.column
-    (r'\*', TT_ASTERISCO), # Para SELECT *
+    (r'\.', TT_PUNTO),
+    (r'\*', TT_ASTERISCO),
 
     # Identificadores:
-    # Pueden empezar con letra o _, seguido de letras, números o _.
-    # También pueden estar entre corchetes [Identificador con espacios o palabras clave] o comillas dobles "..."
-    # Por simplicidad inicial, manejaremos identificadores simples.
-    # Un identificador también puede ser una palabra clave, se reclasificará después.
-    (r'[a-zA-Z_][a-zA-Z0-9_]*', TT_IDENTIFICADOR), 
-    # (r'\[[^\]]+\]', TT_IDENTIFICADOR_DELIMITADO), # Para [Column Name]
-    # (r'"[^"]+"', TT_IDENTIFICADOR_DELIMITADO),   # Para "Table Name" (si no son cadenas)
+    # Comienzan con letra o '_', seguidos de letras, números o '_'.
+    # También se manejan identificadores entre corchetes [objeto con espacios]
+    # y comillas dobles "objeto con espacios" (común en algunos SQL, aunque T-SQL prefiere corchetes).
+    (r'\[[^\]]+\]', TT_IDENTIFICADOR), # Identificadores entre corchetes, ej: [Order Details]
+    (r'"[^"]+"', TT_IDENTIFICADOR),   # Identificadores entre comillas dobles (menos común en T-SQL para objetos)
+    (r'[a-zA-Z_@#][a-zA-Z0-9_@#$]*', TT_IDENTIFICADOR), # Identificadores estándar, variables (@var), tablas temporales (#tmp)
 
-    # Espacios en blanco (se ignorarán pero deben ser consumidos)
+    # Espacios en blanco (se consumen y se marcan para ser ignorados por el parser)
     (r'\s+', TT_WHITESPACE_SQL), 
 ]
 
