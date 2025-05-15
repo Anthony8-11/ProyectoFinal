@@ -1,551 +1,285 @@
 # src/main.py
-import sys
-sys.stdout.reconfigure(encoding='utf-8')
 import os
+import sys
+from datetime import datetime
+import pytz # Para la fecha/hora
 
-# Para que la importación funcione correctamente cuando ejecutamos main.py desde el directorio src/
-# o cuando src/ es parte de PYTHONPATH, necesitamos asegurarnos de que Python
-# pueda encontrar el paquete detector_lenguaje.
-# Si ejecutas desde simulador_compilador/ usando `python -m src.main`,
-# las importaciones relativas como `from .detector_lenguaje...` deberían funcionar.
-# Si ejecutas directamente src/main.py, Python podría no reconocer 'src' como paquete
-# a menos que el directorio padre ('simulador_compilador') esté en sys.path.
-# Una forma robusta es ajustar sys.path si es necesario, o estructurar las llamadas.
+# --- CONTROL DE CONFIGURACIÓN PARA PRUEBAS ---
+# Para probar un solo archivo, pon su nombre aquí (ej. "prueba_pascal.pas").
+# Si es None, se probarán todos los archivos en la lista archivos_a_probar.
+ARCHIVO_ESPECIFICO_A_PROBAR = "prueba_tsql.sql" 
+# ARCHIVO_ESPECIFICO_A_PROBAR = "prueba_tsql.sql" # Ejemplo para probar solo T-SQL
+# ARCHIVO_ESPECIFICO_A_PROBAR = "prueba_pascal.pas" # Ejemplo para probar solo Pascal
+# --- FIN DE CONTROL DE CONFIGURACIÓN ---
 
-# Asumiendo que ejecutamos desde el directorio 'simulador_compilador/' con `python src/main.py`
-# o que el IDE maneja bien la raíz del proyecto.
+# Configuración de codificación para stdout
+if hasattr(sys.stdout, 'reconfigure') and sys.stdout.encoding != 'utf-8':
+    sys.stdout.reconfigure(encoding='utf-8')
+if hasattr(sys.stderr, 'reconfigure') and sys.stderr.encoding != 'utf-8':
+    sys.stderr.reconfigure(encoding='utf-8')
+
 try:
     from detector_lenguaje.detector import detectar_lenguaje
-    # Lexer para Python
-    from analizador_lexico.lexer_python import LexerPython 
-    from analizador_lexico.lexer_python import TT_ERROR_LEXICO as TT_ERROR_PYTHON, TT_EOF as TT_EOF_PYTHON 
-    
-    # Importaciones para el Lexer de HTML
-    from analizador_lexico.lexer_html import LexerHTML
-    # Aquí es donde necesitas importar las constantes:
-    from analizador_lexico.lexer_html import Token as TokenHTML # Si la redefiniste o para claridad
-    from analizador_lexico.lexer_html import TT_ERROR_HTML, TT_EOF_HTML 
+    from analizador_lexico.lexer_python import LexerPython, TT_ERROR_LEXICO as TT_ERROR_PYTHON, TT_EOF as TT_EOF_PYTHON #PYTHON
+    from analizador_lexico.lexer_html import LexerHTML, TT_ERROR_HTML, TT_EOF_HTML #HTML
+    from analizador_lexico.lexer_pascal import LexerPascal, TT_ERROR_PASCAL, TT_EOF_PASCAL #PASCAL
+    from analizador_lexico.lexer_tsql import LexerTSQL, TT_ERROR_SQL, TT_EOF_SQL #Tsql
+    from analizador_sintactico.parser_tsql import ParserTSQL #Tsql
+    from simulador_ejecucion.interprete_tsql import InterpreteTSQL #T_SQL
+    from analizador_sintactico.parser_pascal import ParserPascal #PASCAL
+    from simulador_ejecucion.interprete_pascal import InterpretePascal #PASCAL
 
-    # Añadir la nueva importación para el lexer de Pascal
-    from analizador_lexico.lexer_pascal import LexerPascal
-    from analizador_lexico.lexer_pascal import TT_ERROR_PASCAL, TT_EOF_PASCAL
-
-    # Importaciones para el Lexer de T-SQL
-    from analizador_lexico.lexer_tsql import LexerTSQL
-    from analizador_lexico.lexer_tsql import TT_ERROR_SQL, TT_EOF_SQL
-    
-
-    # Parser para Pascal 
-    from analizador_sintactico.parser_pascal import ParserPascal
-
-        # IMPORTACIÓN PARA INTÉRPRETE PASCAL
-    from simulador_ejecucion.interprete_pascal import InterpretePascal
-
-except ImportError:
-
-    # Este bloque es para ayudar si la ejecución directa de src/main.py causa problemas de importación
-    # y el directorio 'simulador_compilador' no está en PYTHONPATH.
-    import sys
-    # Añadir el directorio padre (simulador_compilador) al path para encontrar 'detector_lenguaje'
-    # sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-    # from detector_lenguaje.detector import detectar_lenguaje
-    # La línea anterior es un poco riesgosa si la estructura cambia.
-    # Es mejor ejecutar como módulo: python -m src.main desde simulador_compilador/
-    print("Error: No se pudo importar 'detectar_lenguaje'.")
+except ImportError as e_import:
+    print(f"Error de Importación Específico: {e_import}")
     print("Asegúrate de ejecutar desde el directorio raíz 'simulador_compilador/' usando 'python -m src.main'")
-    print("o que tu PYTHONPATH esté configurado correctamente.")
+    sys.exit(1)
+except Exception as e_general: 
+    print(f"Se produjo un error general durante la fase de importación: {e_general}")
+    import traceback
+    traceback.print_exc()
     sys.exit(1)
 
+DIRECTORIO_EJEMPLOS = "ejemplos_Codigo"
 
-def analizar_archivo_y_mostrar(ruta_archivo):
-    """
-    Analiza un archivo de código: detecta el lenguaje, realiza análisis léxico
-    y, si es Pascal, también análisis sintáctico y muestra el AST.
-    """
+def crear_directorio_si_no_existe(nombre_directorio):
+    """Crea un directorio si no existe previamente."""
+    if not os.path.exists(nombre_directorio):
+        os.makedirs(nombre_directorio)
+        print(f"Directorio '{nombre_directorio}' creado.")
+    # else:
+    #     print(f"Directorio '{nombre_directorio}' ya existe.")
+
+
+def obtener_fecha_hora_actual_formateada():
+    """Obtiene y formatea la fecha y hora actual para la zona horaria de Guatemala."""
     try:
-        # Usar 'errors='ignore'' puede ocultar problemas de codificación,
-        # pero es práctico para una prueba rápida con diversos archivos.
-        # Para producción, sería mejor manejar las codificaciones explícitamente.
-        with open(ruta_archivo, 'r', encoding='utf-8', errors='ignore') as f:
-            lineas_codigo = f.readlines() 
-        
-        if not lineas_codigo and os.path.getsize(ruta_archivo) == 0: # Archivo realmente vacío
-            print(f"\n--- Analizando archivo: {os.path.basename(ruta_archivo)} ---")
-            print("Resultado: El archivo está vacío.")
+        zona_guatemala = pytz.timezone('America/Guatemala')
+        fecha_hora_actual_gt = datetime.now(zona_guatemala)
+        return fecha_hora_actual_gt.strftime("%A, %d de %B de %Y, %I:%M:%S %p %Z%z")
+    except Exception: 
+        return datetime.now().strftime("%A, %d de %B de %Y, %I:%M:%S %p (Hora Local - pytz o zona no disponible)")
+
+
+def analizar_archivo_y_mostrar(ruta_archivo, nombre_archivo_simple):
+    """
+    Analiza un archivo de código: detecta el lenguaje, realiza análisis léxico,
+    sintáctico (con AST para Pascal) y simulación de ejecución (para Pascal).
+    """
+    print(f"\n--- Analizando archivo: {nombre_archivo_simple} ---")
+    codigo_completo_str = None
+    try:
+        with open(ruta_archivo, 'r', encoding='utf-8') as archivo:
+            codigo_completo_str = archivo.read()
+
+        if not codigo_completo_str.strip():
+            print("Resultado: El archivo está vacío o solo contiene espacios/saltos de línea.")
             print("--------------------------------------")
             return
-        elif not lineas_codigo and os.path.getsize(ruta_archivo) > 0: # Archivo con contenido no decodificable o solo BOM
-             print(f"\n--- Analizando archivo: {os.path.basename(ruta_archivo)} ---")
-             print("Resultado: El archivo tiene contenido pero no se pudieron leer líneas (posible problema de codificación o solo BOM).")
-             print("--------------------------------------")
-             # Intentar leer como bytes y pasar a detectar_lenguaje para ver si puede manejarlo
-             with open(ruta_archivo, 'rb') as bf:
-                 bytes_content = bf.read().decode('utf-8', errors='replace') # Reemplazar errores
-             lineas_codigo = bytes_content.splitlines()
-             if not any(line.strip() for line in lineas_codigo): # Si después de reemplazar, sigue sin contenido útil
-                 return
-
-
-        print(f"\n--- Analizando archivo: {os.path.basename(ruta_archivo)} ---")
-        # Enviamos todas las líneas, la función detectar_lenguaje tomará una muestra
-        lenguaje_detectado, confianza, pistas_debug = detectar_lenguaje(lineas_codigo)
         
+        lenguaje_detectado, confianza, _ = detectar_lenguaje(codigo_completo_str)
         print(f"Lenguaje Detectado: {lenguaje_detectado}")
         print(f"Confianza         : {confianza:.2f}%")
 
-        if lenguaje_detectado == "Python":
-            print("\n--- Análisis Léxico (Python) ---")
-            # Unir las líneas de código en una sola cadena si el lexer espera eso
-            # (Nuestro LexerPython espera una cadena completa)
-            codigo_completo_str = "".join(lineas_codigo)
-            
-            if not codigo_completo_str.strip() and not (lenguaje_detectado == "Python" and len(lineas_codigo) > 0 and all(not line.strip() for line in lineas_codigo)):
-                print("El código Python está vacío o solo contiene espacios/saltos de línea.")
-            else:
-                try:
-                    lexer_py = LexerPython(codigo_completo_str)
-                    tokens_obtenidos = lexer_py.tokenizar()
-                    
-                    print(f"Total de tokens generados (Python): {len(tokens_obtenidos)}")
-                    tiene_errores_lexicos = False
-                    for i, token_obj in enumerate(tokens_obtenidos):
-                        # Usamos el __repr__ de la clase Token que definimos
-                        print(f"  {i+1:03d}: {token_obj}") 
-                        if token_obj.tipo == 'ERROR_LEXICO': # Usar la constante TT_ERROR_LEXICO sería mejor
-                            tiene_errores_lexicos = True
-                    
-                    if tiene_errores_lexicos:
-                        print(">>> Se encontraron errores léxicos en el código Python. <<<")
-                    elif tokens_obtenidos and tokens_obtenidos[-1].tipo == 'EOF': # Usar TT_EOF
-                        print(">>> Análisis léxico de Python completado sin errores aparentes (finalizado con EOF). <<<")
-                    else:
-                        print(">>> Análisis léxico de Python finalizado (verificar si falta EOF o hay otros problemas). <<<")
+        if lenguaje_detectado == "Pascal":
+            print("\n--- Análisis Léxico (Pascal) ---")
+            ast_generado_pascal = None 
+            parser_pascal_instancia = None 
+            try:
+                lexer_pas = LexerPascal(codigo_completo_str)
+                tokens_obtenidos = lexer_pas.tokenizar()
+                print(f"Total de tokens generados (Pascal): {len(tokens_obtenidos)}")
+                tiene_errores_lexicos_pascal = any(t.tipo == TT_ERROR_PASCAL for t in tokens_obtenidos)
+                
+                # (Descomentar para imprimir tokens de Pascal)
+                # for i, token_obj in enumerate(tokens_obtenidos):
+                #     print(f"  {i+1:03d}: {token_obj}")
+                
+                if tiene_errores_lexicos_pascal:
+                    print(">>> Se encontraron errores léxicos en el código Pascal. <<<")
+                elif tokens_obtenidos and tokens_obtenidos[-1].tipo == TT_EOF_PASCAL:
+                    print(">>> Análisis léxico de Pascal completado sin errores aparentes (finalizado con EOF). <<<")
+                else:
+                    print(">>> Problema con la salida del lexer de Pascal. <<<")
 
-                except Exception as e_lex:
-                    print(f"ERROR durante el análisis léxico de Python: {e_lex}")
-                    import traceback
-                    traceback.print_exc()
+                if not tiene_errores_lexicos_pascal and tokens_obtenidos and tokens_obtenidos[-1].tipo == TT_EOF_PASCAL:
+                    print("\n--- Análisis Sintáctico (Pascal) ---")
+                    try:
+                        parser_pascal_instancia = ParserPascal(tokens_obtenidos)
+                        ast_generado_pascal = parser_pascal_instancia.parse() 
+                    except Exception as e_parse_pascal:
+                        print(f"ERROR CRÍTICO en la ejecución del Parser de Pascal: {e_parse_pascal}")
+                else:
+                    print("\n--- Análisis Sintáctico (Pascal) ---")
+                    print("No se realizó el análisis sintáctico debido a errores léxicos o problemas con los tokens.")
+                print("--- Fin Análisis Sintáctico (Pascal) ---")
+
+                if ast_generado_pascal:
+                    print("\n--- Árbol de Sintaxis Abstracto (AST) Generado (Pascal) ---")
+                    # print(ast_generado_pascal) # Descomentar para ver el AST
+                    print("--- Fin del AST (Pascal) ---")
+
+                    if parser_pascal_instancia and hasattr(parser_pascal_instancia, 'tabla_simbolos') and parser_pascal_instancia.tabla_simbolos:
+                        interprete = InterpretePascal(parser_pascal_instancia.tabla_simbolos)
+                        interprete.interpretar(ast_generado_pascal)
+                    else:
+                        print("\nNo se pudo iniciar la simulación: falta la instancia del parser o la tabla de símbolos.")
+                elif not tiene_errores_lexicos_pascal and \
+                     (parser_pascal_instancia is None or (hasattr(parser_pascal_instancia, 'errores_sintacticos') and not parser_pascal_instancia.errores_sintacticos)):
+                    print("\nNo se generó un AST para Pascal, aunque no se reportaron errores explícitos.")
+            except Exception as e_proc_pascal:
+                print(f"ERROR SEVERO durante el procesamiento de Pascal: {e_proc_pascal}")
+            print("--- Fin Procesamiento Pascal ---")
+        
+        elif lenguaje_detectado == "Python":
+            print("\n--- Análisis Léxico (Python) ---")
+            if not codigo_completo_str.strip():
+                print("El código Python está vacío.")
+            else:
+                lexer_py = LexerPython(codigo_completo_str)
+                tokens_py = lexer_py.tokenizar()
+                print(f"Total de tokens generados (Python): {len(tokens_py)}")
+                if any(t.tipo == TT_ERROR_PYTHON for t in tokens_py):
+                    print(">>> Se encontraron errores léxicos en Python. <<<")
+                elif tokens_py and tokens_py[-1].tipo == TT_EOF_PYTHON:
+                    print(">>> Análisis léxico de Python completado. <<<")
             print("--- Fin Análisis Léxico (Python) ---")
 
         elif lenguaje_detectado == "HTML":
-                print("\n--- Análisis Léxico (HTML) ---")
-                codigo_completo_str = "".join(lineas_codigo)
-
-                if not codigo_completo_str.strip():
-                    print("El código HTML para el análisis léxico está vacío o solo contiene espacios/saltos de línea.")
-                else:
-                    try:
-                        lexer_ht = LexerHTML(codigo_completo_str)
-                        tokens_obtenidos = lexer_ht.tokenizar() # Usar el método tokenizar con la máquina de estados
-                        
-                        print(f"Total de tokens generados (HTML): {len(tokens_obtenidos)}")
-                        tiene_errores_lexicos_html = False
-                        for i, token_obj in enumerate(tokens_obtenidos):
-                            # Asumimos que la clase Token (o TokenHTML) tiene un __repr__ adecuado
-                            print(f"  {i+1:03d}: {token_obj}") 
-                            if token_obj.tipo == TT_ERROR_HTML: # Usar la constante importada
-                                tiene_errores_lexicos_html = True
-                        
-                        if tiene_errores_lexicos_html:
-                            print(">>> Se encontraron errores léxicos en el código HTML. <<<")
-                        elif tokens_obtenidos and tokens_obtenidos[-1].tipo == TT_EOF_HTML: # Usar la constante importada
-                            print(">>> Análisis léxico de HTML completado sin errores aparentes (finalizado con EOF). <<<")
-                        elif not tokens_obtenidos:
-                             print(">>> No se generaron tokens HTML (posiblemente código vacío). <<<")
-                        else:
-                            print(f">>> Análisis léxico de HTML finalizado, pero el último token no es EOF (último: {tokens_obtenidos[-1].tipo if tokens_obtenidos else 'N/A'}). <<<")
-
-                    except Exception as e_lex_html:
-                        print(f"ERROR SEVERO durante el análisis léxico de HTML: {e_lex_html}")
-                        import traceback
-                        traceback.print_exc()
-                print("--- Fin Análisis Léxico (HTML) ---")
-
-        elif lenguaje_detectado == "Pascal":
-                print("\n--- Análisis Léxico (Pascal) ---")
-                codigo_completo_str = "".join(lineas_codigo)
-                ast_generado_pascal = None
-                parser_pascal_instancia = None # Para acceder a la tabla de símbolos si es necesario
-                if not codigo_completo_str.strip():
-                    print("El código Pascal para el análisis léxico está vacío.")
-                else:
-                    try:
-                        lexer_pas = LexerPascal(codigo_completo_str)
-                        tokens_obtenidos = lexer_pas.tokenizar()
-                        print(f"Total de tokens generados (Pascal): {len(tokens_obtenidos)}")
-                        tiene_errores_lexicos_pascal = False
-                        # (Opcional: imprimir tokens)
-                        for i, token_obj in enumerate(tokens_obtenidos):
-                             print(f"  {i+1:03d}: {token_obj}")
-                             if token_obj.tipo == TT_ERROR_PASCAL:
-                                 tiene_errores_lexicos_pascal = True
-                        
-                        # Verificar errores léxicos de forma más simple
-                        if any(t.tipo == TT_ERROR_PASCAL for t in tokens_obtenidos):
-                            tiene_errores_lexicos_pascal = True
-                        
-                        mensaje_lexico_pascal = ""
-                        if tiene_errores_lexicos_pascal:
-                            mensaje_lexico_pascal = ">>> Se encontraron errores léxicos en el código Pascal. <<<"
-                        elif tokens_obtenidos and tokens_obtenidos[-1].tipo == TT_EOF_PASCAL:
-                            mensaje_lexico_pascal = ">>> Análisis léxico de Pascal completado sin errores aparentes (finalizado con EOF). <<<"
-                        else:
-                            mensaje_lexico_pascal = ">>> Problema con la salida del lexer de Pascal (no EOF o sin tokens). <<<"
-                        print(mensaje_lexico_pascal)
-
-                        if not tiene_errores_lexicos_pascal and \
-                        tokens_obtenidos and \
-                        tokens_obtenidos[-1].tipo == TT_EOF_PASCAL:
-                            
-                            print("\n--- Análisis Sintáctico (Pascal) ---")
-                            # La impresión de depuración de la tabla de símbolos ya está en ParserPascal.parse_bloque
-                            try:
-                                parser_pascal_instancia = ParserPascal(tokens_obtenidos)
-                                ast_generado_pascal = parser_pascal_instancia.parse() 
-                                # Los mensajes de éxito/error del parsing ya se imprimen dentro de parser_pascal_instancia.parse()
-                            except Exception as e_parse_pascal:
-                                print(f"ERROR CRÍTICO en la ejecución del Parser de Pascal: {e_parse_pascal}")
-                                # import traceback # traceback ya está importado arriba si es necesario
-                                # traceback.print_exc()
-                        else:
-                            print("\n--- Análisis Sintáctico (Pascal) ---")
-                            print("No se realizó el análisis sintáctico debido a errores léxicos o problemas con tokens.")
-                        print("--- Fin Análisis Sintáctico (Pascal) ---")
-
-                        if ast_generado_pascal:
-                            print("\n--- Árbol de Sintaxis Abstracto (AST) Generado (Pascal) ---")
-                            #print(ast_generado_pascal) # Imprime usando los __repr__ de los nodos
-                            print("--- Fin del AST (Pascal) ---")
-
-                            # --- INICIO DE LA LLAMADA AL INTÉRPRETE ---
-                            if parser_pascal_instancia and parser_pascal_instancia.tabla_simbolos:
-                                interprete = InterpretePascal(parser_pascal_instancia.tabla_simbolos)
-                                interprete.interpretar(ast_generado_pascal)
-                            else:
-                                print("No se pudo iniciar la simulación: falta la instancia del parser o la tabla de símbolos.")
-                            # --- FIN DE LA LLAMADA AL INTÉRPRETE ---
-                            
-                        elif not tiene_errores_lexicos_pascal and (parser_pascal_instancia is None or not parser_pascal_instancia.errores_sintacticos):
-                            print("\nNo se generó un AST para Pascal, aunque no se reportaron errores explícitos (revisar lógica del parser).")
-
-                    except Exception as e_proc_pascal: # Error general en el procesamiento de Pascal
-                        print(f"ERROR SEVERO durante el procesamiento de Pascal: {e_proc_pascal}")
-                        # import traceback
-                        # traceback.print_exc()
-                        print("--- Fin Procesamiento Pascal ---") # Mensaje general para el bloque Pascal
+            print("\n--- Análisis Léxico (HTML) ---")
+            if not codigo_completo_str.strip():
+                print("El código HTML está vacío.")
+            else:
+                lexer_html = LexerHTML(codigo_completo_str)
+                tokens_html = lexer_html.tokenizar()
+                print(f"Total de tokens generados (HTML): {len(tokens_html)}")
+                if any(t.tipo == TT_ERROR_HTML for t in tokens_html):
+                    print(">>> Se encontraron errores léxicos en HTML. <<<")
+                elif tokens_html and tokens_html[-1].tipo == TT_EOF_HTML:
+                    print(">>> Análisis léxico de HTML completado. <<<")
+            print("--- Fin Análisis Léxico (HTML) ---")
 
         elif lenguaje_detectado == "T-SQL":
             print("\n--- Análisis Léxico (T-SQL) ---")
-            codigo_completo_str = "".join(lineas_codigo)
-            if not codigo_completo_str.strip():
+            ast_generado_tsql = None # Para almacenar el AST de T-SQL
+            parser_tsql_instancia = None # Para almacenar la instancia del parser
+
+            if not codigo_completo_str.strip(): 
                 print("El código T-SQL para el análisis léxico está vacío.")
             else:
                 try:
+                    # Fase Léxica para T-SQL
                     lexer_tsql = LexerTSQL(codigo_completo_str)
-                    tokens_obtenidos = lexer_tsql.tokenizar()
+                    tokens_obtenidos_tsql = lexer_tsql.tokenizar()
                     
-                    print(f"Total de tokens generados (T-SQL): {len(tokens_obtenidos)}")
-                    tiene_errores_lexicos_tsql = False
-                    for i, token_obj in enumerate(tokens_obtenidos):
-                        print(f"  {i+1:03d}: {token_obj}") 
-                        if token_obj.tipo == TT_ERROR_SQL:
-                            tiene_errores_lexicos_tsql = True
+                    print(f"Total de tokens generados (T-SQL): {len(tokens_obtenidos_tsql)}")
+                    tiene_errores_lexicos_tsql = any(t.tipo == TT_ERROR_SQL for t in tokens_obtenidos_tsql)
+                    
+                    # (Descomentar para imprimir tokens de T-SQL)
+                    # for i, token_obj in enumerate(tokens_obtenidos_tsql): 
+                    #     print(f"  {i+1:03d}: {token_obj}") 
                     
                     if tiene_errores_lexicos_tsql:
                         print(">>> Se encontraron errores léxicos en el código T-SQL. <<<")
-                    elif tokens_obtenidos and tokens_obtenidos[-1].tipo == TT_EOF_SQL:
+                    elif tokens_obtenidos_tsql and tokens_obtenidos_tsql[-1].tipo == TT_EOF_SQL:
                         print(">>> Análisis léxico de T-SQL completado sin errores aparentes (finalizado con EOF). <<<")
                     else:
-                        print(">>> Problema con la salida del lexer de T-SQL (no finalizó con EOF o no generó tokens). <<<")
+                        print(">>> Problema con la salida del lexer de T-SQL. <<<")
 
-                except Exception as e_lex_tsql:
-                    print(f"ERROR SEVERO durante el análisis léxico de T-SQL: {e_lex_tsql}")
-                    # import traceback # Descomentar si se necesita el traceback completo aquí.
-                    # traceback.print_exc()
-            print("--- Fin Análisis Léxico (T-SQL) ---")
-        
-        # Opcional: Mostrar las pistas activadas para depuración
-        # print("Pistas activadas (debug):")
-        # for lang_key, p_list in pistas_debug.items():
-        #     if p_list and (lenguaje_detectado.startswith(lang_key) or "Desconocido" in lenguaje_detectado):
-        #         print(f"  Para '{lang_key}':")
-        #         for pista_info in p_list:
-        #             print(f"    - {pista_info}")
-        # if "REFINAMIENTO_GLOBAL" in pistas_debug and pistas_debug["REFINAMIENTO_GLOBAL"]:
-        #     print(f"  Refinamientos Globales:")
-        #     for pista_info in pistas_debug["REFINAMIENTO_GLOBAL"]:
-        #         print(f"    - {pista_info}")
+                    # Fase Sintáctica para T-SQL (solo si la léxica fue exitosa)
+                    if not tiene_errores_lexicos_tsql and \
+                       tokens_obtenidos_tsql and \
+                       tokens_obtenidos_tsql[-1].tipo == TT_EOF_SQL:
+                        
+                        print("\n--- Análisis Sintáctico (T-SQL) ---")
+                        try:
+                            parser_tsql_instancia = ParserTSQL(tokens_obtenidos_tsql)
+                            ast_generado_tsql = parser_tsql_instancia.parse()
+                            # Los mensajes de éxito/error del parsing ya se imprimen desde parser_tsql_instancia.parse()
+                        except Exception as e_parse_tsql:
+                            print(f"ERROR CRÍTICO en la ejecución del Parser de T-SQL: {e_parse_tsql}")
+                            # import traceback; traceback.print_exc() # Descomentar para más detalles
+                    else:
+                        print("\n--- Análisis Sintáctico (T-SQL) ---")
+                        print("No se realizó el análisis sintáctico debido a errores léxicos o problemas con los tokens.")
+                    print("--- Fin Análisis Sintáctico (T-SQL) ---")
 
-        print("--------------------------------------")
+                    # Visualización del AST de T-SQL (si se generó)
+                    if ast_generado_tsql:
+                        print("\n--- Árbol de Sintaxis Abstracto (AST) Generado (T-SQL) ---")
+                        print(ast_generado_tsql) # Imprime usando los __repr__ de los nodos AST de SQL
+                        print("--- Fin del AST (T-SQL) ---")
+
+                        print("\n--- Simulación de Ejecución (T-SQL) ---")
+                        try:
+                            # No pasamos tabla de símbolos al intérprete T-SQL por ahora,
+                            # ya que el parser T-SQL no la está usando activamente aún.
+                            # El intérprete T-SQL tiene su propia self.catalogo_tablas y self.memoria_variables_tsql.
+                            interprete_tsql = InterpreteTSQL() 
+                            interprete_tsql.interpretar_script(ast_generado_tsql)
+                        except Exception as e_interp_tsql:
+                            print(f"ERROR CRÍTICO durante la simulación de T-SQL: {e_interp_tsql}")
+                            # import traceback; traceback.print_exc() # Descomentar para más detalles
+                        
+                        # Aquí iría la llamada al intérprete/simulador de T-SQL si lo tuviéramos
+                        # print("\n--- Simulación de Ejecución (T-SQL) ---")
+                        # interprete_tsql = InterpreteTSQL(parser_tsql_instancia.tabla_simbolos) # Si se usa tabla de símbolos
+                        # interprete_tsql.interpretar(ast_generado_tsql)
+                        # print("--- Fin Simulación de Ejecución (T-SQL) ---")
+
+                    elif not tiene_errores_lexicos_tsql and \
+                         (parser_tsql_instancia is None or (hasattr(parser_tsql_instancia, 'errores_sintacticos') and not parser_tsql_instancia.errores_sintacticos)):
+                        print("\nNo se generó un AST para T-SQL, aunque no se reportaron errores explícitos (revisar lógica del parser).")
+
+                except Exception as e_proc_tsql:
+                    print(f"ERROR SEVERO durante el procesamiento de T-SQL: {e_proc_tsql}")
+                    # import traceback; traceback.print_exc() # Descomentar para más detalles
+            print("--- Fin Procesamiento T-SQL ---")
+
+        else:
+            print(f"Análisis detallado para '{lenguaje_detectado}' no implementado aún.")
 
     except FileNotFoundError:
-        print(f"Error: El archivo '{ruta_archivo}' no fue encontrado.")
+        print(f"Error: El archivo '{ruta_archivo}' no fue encontrado. Por favor, asegúrate de que exista en la carpeta '{DIRECTORIO_EJEMPLOS}'.")
     except Exception as e:
-        print(f"Ocurrió un error al procesar el archivo '{os.path.basename(ruta_archivo)}': {e}")
-        import traceback
+        print(f"Ocurrió un error inesperado al procesar el archivo '{nombre_archivo_simple}': {e}")
+        import traceback 
         traceback.print_exc()
+    print("--------------------------------------")
 
 
 if __name__ == "__main__":
-    print("Iniciando Simulador de Compilador - Prueba del Detector de Lenguaje")
-    print("Fecha y Hora Actual:", "[[CURRENT_DATETIME_CST_GUATEMALA]]") # Placeholder para la fecha actual
+    print("Iniciando Simulador de Compilador - Prueba de Fases")
+    print("Fecha y Hora Actual:", obtener_fecha_hora_actual_formateada())
+    print("="*50)
 
-    # Directorio donde se crearán/buscarán los archivos de ejemplo
-    # Asumimos que main.py está en src/, y ejemplos_codigo/ está al mismo nivel que src/
-    directorio_base_proyecto = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-    directorio_ejemplos = os.path.join(directorio_base_proyecto, "ejemplos_codigo")
-
-    if not os.path.exists(directorio_ejemplos):
-        print(f"Creando directorio de ejemplos en: {directorio_ejemplos}")
-        os.makedirs(directorio_ejemplos)
-
-    # Definición de archivos de prueba y su contenido
-    # (Estos son los mismos que te mostré antes, pero ahora los crearemos si no existen)
-    archivos_de_prueba_contenido = {
-        "prueba_python.py": """
-def saludar(nombre):
-    # Esto es un comentario
-    mensaje = "Hola, " + nombre + "!" # Concatenación
-    print(f"Mensaje: {mensaje}")
-    if 10 > 5 and True:
-        x = 20.5 * 2
-        print(f"Valor de x: {x}")
-    return mensaje
-saludar("Mundo")
-class MiClase:
-    pass
-        """,
-        "prueba_html.html": """
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <title>Mi Página de Prueba</title>
-    <style> body { font-family: Arial, sans-serif; } </style>
-</head>
-<body>
-    <h1>Hola Mundo Web</h1>
-    <p>Este es un párrafo de prueba con <a href="#">un enlace</a>.</p>
-    <!-- Comentario HTML -->
-    <script>
-        // Comentario JS
-        console.log("JavaScript embebido en HTML");
-        function test() { return 1+1; }
-    </script>
-</body>
-</html>
-        """,
-        "prueba_cpp.cpp": """
-#include <iostream>
-#include <vector>
-#include <string>
-
-// Clase de ejemplo simple
-class MiClaseCpp {
-public:
-    int datoMiembro;
-    MiClaseCpp(int d) : datoMiembro(d) {}
-    void mostrarDato() {
-        std::cout << "El dato es: " << datoMiembro << std::endl;
-    }
-};
-
-int main(int argc, char *argv[]) {
-    std::cout << "¡Hola desde C++ en el simulador!" << std::endl;
-    for (int i = 0; i < 3; ++i) {
-        // Un bucle simple
-    }
-    MiClaseCpp objeto(123);
-    objeto.mostrarDato();
-    /* Comentario
-       multilínea C++ */
-    return 0;
-}
-        """,
-        "prueba_pascal.pas": """
-program TestBucles;
-var
-   contador : integer;
-   limite : integer;
-begin
-   contador := 1;
-   limite := 5;
-   writeln('Iniciando bucle while:');
-   
-   while contador <= limite do
-   begin
-      write('Contador = ', contador);
-      if contador mod 2 = 0 then
-         writeln(' (par)')
-      else
-         writeln(' (impar)');
-      contador := contador + 1;
-   end;
-   
-   writeln('Bucle while finalizado.');
-   writeln('Valor final del contador: ', contador);
-end.
-        """,
-        "prueba_plsql.sql": """
--- Bloque PL/SQL de ejemplo
-DECLARE
-  v_nombre_empleado VARCHAR2(100) := 'Juan Perez';
-  v_salario_actual NUMBER := 60000;
-  V_FECHA_ALTA DATE;
-  v_aumento_pct NUMBER := 0.05; -- 5% de aumento
-BEGIN
-  v_salario_actual := v_salario_actual * (1 + v_aumento_pct); 
-  DBMS_OUTPUT.PUT_LINE('Empleado: ' || v_nombre_empleado);
-  DBMS_OUTPUT.PUT_LINE('Salario Actualizado: ' || TO_CHAR(v_salario_actual, 'L999G999D99'));
-
-  SELECT SYSDATE INTO V_FECHA_ALTA FROM DUAL;
-  DBMS_OUTPUT.PUT_LINE('Fecha de Proceso: ' || TO_CHAR(V_FECHA_ALTA, 'DD-MON-YYYY HH24:MI:SS'));
-  
-  /* Ejemplo de un bucle simple
-     FOR i IN 1..3 LOOP
-       DBMS_OUTPUT.PUT_LINE('Iteración: ' || i);
-     END LOOP;
-  */
-EXCEPTION
-  WHEN NO_DATA_FOUND THEN
-    DBMS_OUTPUT.PUT_LINE('Error: No se encontraron datos.');
-  WHEN OTHERS THEN
-    DBMS_OUTPUT.PUT_LINE('Ocurrió un error inesperado: ' || SQLERRM);
-END;
-/
--- Sentencia SQL adicional fuera del bloque PL/SQL
-SELECT * FROM DUAL;
-        """,
-        "prueba_tsql.sql": """
--- Script de T-SQL de ejemplo
-PRINT 'Iniciando script de prueba para T-SQL';
-GO
-
-DECLARE @NombreCliente VARCHAR(100), @CiudadCliente VARCHAR(50);
-DECLARE @TotalPedidos INT;
-
-SET @NombreCliente = 'Cliente Ejemplo S.A.';
-SET @CiudadCliente = 'Ciudad Gótica';
-SET @TotalPedidos = 0;
-
-IF EXISTS (SELECT 1 FROM sys.tables WHERE name = 'PedidosSimulados')
-BEGIN
-    PRINT 'La tabla PedidosSimulados ya existe.';
-    SELECT @TotalPedidos = COUNT(*) FROM PedidosSimulados WHERE Cliente = @NombreCliente;
-END
-ELSE
-BEGIN
-    PRINT 'La tabla PedidosSimulados no existe. Creándola...';
-    /*
-    CREATE TABLE PedidosSimulados (
-        PedidoID INT PRIMARY KEY IDENTITY(1,1),
-        Cliente VARCHAR(100),
-        FechaPedido DATETIME DEFAULT GETDATE(),
-        Monto DECIMAL(10,2)
-    );
-    INSERT INTO PedidosSimulados (Cliente, Monto) VALUES (@NombreCliente, 150.75);
-    SET @TotalPedidos = 1;
-    */
-    PRINT 'Tabla PedidosSimulados creada (simulado).';
-END
-
-PRINT 'Cliente: ' + @NombreCliente + ' de ' + @CiudadCliente;
-PRINT 'Total de pedidos encontrados: ' + CAST(@TotalPedidos AS VARCHAR(10));
-GO
-
-SELECT @@VERSION AS VersionSQLServer;
-        """,
-        "prueba_javascript.js": """
-// Comentario de una línea en JavaScript
-/*
-  Comentario multilínea
-  en JavaScript.
-*/
-function calcularTotal(precio, cantidad) {
-    let subtotal = precio * cantidad; // Cálculo simple
-    const impuesto = 0.12; // 12% de impuesto
-    let totalConImpuesto = subtotal * (1 + impuesto);
-    return totalConImpuesto.toFixed(2); // Redondear a 2 decimales
-}
-
-var producto = "Laptop";
-let precioUnitario = 750.99;
-const cantidadComprada = 2;
-
-let totalFactura = calcularTotal(precioUnitario, cantidadComprada);
-
-console.log(`Producto: ${producto}`);
-console.log(`Precio Unitario: $${precioUnitario}`);
-console.log(`Cantidad: ${cantidadComprada}`);
-console.log(`Total a Pagar: $${totalFactura}`);
-
-if (cantidadComprada > 1) {
-    document.getElementById("mensaje").innerHTML = "¡Gracias por comprar múltiples unidades!";
-}
-
-// Ejemplo de clase en ES6
-class Usuario {
-    constructor(nombre, email) {
-        this.nombre = nombre;
-        this.email = email;
-    }
-
-    presentarse() {
-        console.log(`Hola, soy ${this.nombre} y mi email es ${this.email}.`);
-    }
-}
-const user1 = new Usuario("Ana", "ana@example.com");
-user1.presentarse();
-async function obtenerDatos() { return "datos"; }
-        """,
-        "prueba_vacia.txt": """
-""",
-        "prueba_solo_espacios.txt": """
-        
-          
-            
-        """
-    }
-
-    # Crear o sobrescribir los archivos de ejemplo
-    for nombre_archivo, contenido_archivo in archivos_de_prueba_contenido.items():
-        ruta_completa_archivo = os.path.join(directorio_ejemplos, nombre_archivo)
-        try:
-            with open(ruta_completa_archivo, 'w', encoding='utf-8') as f_ej:
-                f_ej.write(contenido_archivo.strip()) # strip() para quitar espacios/saltos al inicio/final del contenido
-            print(f"Archivo de ejemplo '{nombre_archivo}' creado/actualizado.")
-        except Exception as e_create:
-            print(f"Error creando archivo de ejemplo '{nombre_archivo}': {e_create}")
-
-    print("\n=== Iniciando análisis de archivos de ejemplo ===")
-    # Analizar cada archivo de ejemplo
-    for nombre_archivo in archivos_de_prueba_contenido.keys():
-        ruta_completa_archivo = os.path.join(directorio_ejemplos, nombre_archivo)
-        if os.path.exists(ruta_completa_archivo): # Solo analizar si el archivo realmente existe
-            analizar_archivo_y_mostrar(ruta_completa_archivo)
-        else:
-            print(f"Advertencia: El archivo de ejemplo '{ruta_completa_archivo}' no se encontró para el análisis.")
-
-    print("\n=== Prueba con entrada de texto directa ===")
-    codigo_directo_html = "<!DOCTYPE html>\n<html><head><title>Test</title></head><body><h1>Test Directo</h1></body></html>"
-    print(f"\n--- Analizando código directo (HTML) ---")
-    lenguaje_html, confianza_html, _ = detectar_lenguaje(codigo_directo_html)
-    print(f"Lenguaje Detectado: {lenguaje_html}")
-    print(f"Confianza         : {confianza_html:.2f}%")
-    print("--------------------------------------")
+    # Solo se crea el directorio de ejemplos si no existe.
+    # Los archivos de ejemplo ahora deben ser creados manualmente por el usuario.
+    crear_directorio_si_no_existe(DIRECTORIO_EJEMPLOS)
+    print(f"Asegúrate de que tus archivos de prueba estén en la carpeta: '{os.path.abspath(DIRECTORIO_EJEMPLOS)}'")
     
-    codigo_directo_python = "def mi_funcion_directa(a, b):\n  resultado = a + b # Suma simple\n  return resultado\nprint(mi_funcion_directa(5,3))"
-    print(f"\n--- Analizando código directo (Python) ---")
-    lenguaje_py, confianza_py, _ = detectar_lenguaje(codigo_directo_python)
-    print(f"Lenguaje Detectado: {lenguaje_py}")
-    print(f"Confianza         : {confianza_py:.2f}%")
-    print("--------------------------------------")
+    if ARCHIVO_ESPECIFICO_A_PROBAR:
+        # Analizar solo el archivo especificado
+        print(f"\nModo de prueba: Analizando solo '{ARCHIVO_ESPECIFICO_A_PROBAR}'")
+        ruta_completa = os.path.join(DIRECTORIO_EJEMPLOS, ARCHIVO_ESPECIFICO_A_PROBAR)
+        if os.path.exists(ruta_completa):
+            analizar_archivo_y_mostrar(ruta_completa, ARCHIVO_ESPECIFICO_A_PROBAR)
+        else:
+            print(f"Archivo de prueba específico '{ARCHIVO_ESPECIFICO_A_PROBAR}' no encontrado en '{DIRECTORIO_EJEMPLOS}'.")
+    else:
+        # Analizar todos los archivos en la lista si no se especifica uno.
+        print("\nModo de prueba: Analizando todos los archivos de la lista predefinida.")
+        archivos_a_probar = [
+            "prueba_pascal.pas",
+            "prueba_python.py",
+            "prueba_html.html",
+            "prueba_tsql.sql", 
+        ]
+        for nombre_archivo_simple in archivos_a_probar:
+            ruta_completa = os.path.join(DIRECTORIO_EJEMPLOS, nombre_archivo_simple)
+            if os.path.exists(ruta_completa):
+                analizar_archivo_y_mostrar(ruta_completa, nombre_archivo_simple)
+            else:
+                print(f"Archivo de prueba '{nombre_archivo_simple}' no encontrado en '{DIRECTORIO_EJEMPLOS}'. Asegúrate de crearlo.")
+    
+    print("\nPrueba del Simulador de Compilador Finalizada.")
 
-    codigo_muy_corto_ambiguo = "x = 10;"
-    print(f"\n--- Analizando código directo (Corto y Ambiguo) ---")
-    lenguaje_amb, confianza_amb, _ = detectar_lenguaje(codigo_muy_corto_ambiguo)
-    print(f"Lenguaje Detectado: {lenguaje_amb}")
-    print(f"Confianza         : {confianza_amb:.2f}%")
-    print("--------------------------------------")
-
-    print("\nPrueba del Detector de Lenguaje Finalizada.")

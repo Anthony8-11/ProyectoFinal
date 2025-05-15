@@ -67,47 +67,47 @@ PALABRAS_CLAVE_SQL = {
     'begin', 'end', 'if', 'else', 'while', 'declare', 'as', 'exec', 'execute',
     'procedure', 'function', 'trigger', 'go', 'union', 'all', 'exists', 'case', 'when', 'then',
     'join', 'inner', 'left', 'right', 'outer', 'full', 'is', 'like', 'between', 'nulls', 'first', 'last',
-    'current_timestamp', 'getdate' # Ejemplos de funciones comunes
+    'current_timestamp', 'getdate', 'print' # Ejemplos de funciones comunes
 }
 
 # Los tipos de dato SQL se incluyen en PALABRAS_CLAVE_SQL para simplificar.
 # El parser determinará su rol contextual.
 
 ESPECIFICACIONES_TOKEN_SQL = [
-    # Comentarios (deben ir primero para que no interfieran con otros patrones como '/')
-    (r'--[^\n\r]*', TT_COMENTARIO_LINEA),      # Comentario de línea: -- hasta el final
-    (r'/\*[\s\S]*?\*/', TT_COMENTARIO_BLOQUE), # Comentario de bloque: /* ... */ (no anidado)
+    # Comentarios (deben ir primero)
+    (r'--[^\n\r]*', TT_COMENTARIO_LINEA),
+    (r'/\*[\s\S]*?\*/', TT_COMENTARIO_BLOQUE),
 
-    # Literales de cadena (entre comillas simples, '' para escapar una comilla simple)
-    (r"'[^']*'(?:''[^']*')*", TT_LITERAL_CADENA), 
+    # Literales
+    (r"'[^']*'(?:''[^']*')*", TT_LITERAL_CADENA),
+    (r'[+-]?\d+\.\d*([eE][+-]?\d+)?', TT_LITERAL_NUMERICO), 
+    (r'[+-]?\d+([eE][+-]?\d+)?', TT_LITERAL_NUMERICO),
 
-    # Números: decimales y enteros.
-    # Permite signo opcional, punto decimal, y notación científica (e/E).
-    (r'[+-]?\d+\.\d*([eE][+-]?\d+)?', TT_LITERAL_NUMERICO), # Decimales: 1.0, .5, 1.2E-5, +3.0, -0.5
-    (r'[+-]?\d+([eE][+-]?\d+)?', TT_LITERAL_NUMERICO),      # Enteros: 123, 1e5, +100, -20
+    # Identificadores Delimitados (antes de operadores para evitar conflictos)
+    (r'\[[^\]]+\]', TT_IDENTIFICADOR), 
+    (r'"[^"]+"', TT_IDENTIFICADOR),   
 
-    # Operadores de comparación
+    # Variables y objetos especiales de T-SQL (más específicos, antes de identificadores generales)
+    (r'@@[a-zA-Z_][a-zA-Z0-9_]*', TT_IDENTIFICADOR),
+    (r'@[a-zA-Z_][a-zA-Z0-9_]*', TT_IDENTIFICADOR),   
+    (r'##[a-zA-Z_][a-zA-Z0-9_]*', TT_IDENTIFICADOR), 
+    (r'#[a-zA-Z_][a-zA-Z0-9_]*', TT_IDENTIFICADOR),
+
+    # Operadores y Delimitadores (el orden entre ellos puede importar)
+    # El asterisco específico para SELECT * debe ir ANTES del operador aritmético general.
+    (r'\*', TT_ASTERISCO), # Para SELECT *
     (r'<>|!=|>=|<=|=|<|>', TT_OPERADOR_COMPARACION),
+    (r'[\+\-\*\/%]', TT_OPERADOR_ARITMETICO), # Quitamos '*' de aquí, ya que se maneja arriba
     
-    # Operadores aritméticos
-    (r'[\+\-\*\/%]', TT_OPERADOR_ARITMETICO), # % es módulo en T-SQL
-
-    # Delimitadores y símbolos especiales
     (r'\(', TT_PARENTESIS_IZQ),
     (r'\)', TT_PARENTESIS_DER),
     (r',', TT_COMA),
     (r';', TT_PUNTO_Y_COMA),
     (r'\.', TT_PUNTO),
-    (r'\*', TT_ASTERISCO),
-
-    # Identificadores:
-    # Comienzan con letra o '_', seguidos de letras, números o '_'.
-    # También se manejan identificadores entre corchetes [objeto con espacios]
-    # y comillas dobles "objeto con espacios" (común en algunos SQL, aunque T-SQL prefiere corchetes).
-    (r'\[[^\]]+\]', TT_IDENTIFICADOR), # Identificadores entre corchetes, ej: [Order Details]
-    (r'"[^"]+"', TT_IDENTIFICADOR),   # Identificadores entre comillas dobles (menos común en T-SQL para objetos)
-    (r'[a-zA-Z_@#][a-zA-Z0-9_@#$]*', TT_IDENTIFICADOR), # Identificadores estándar, variables (@var), tablas temporales (#tmp)
-
+    
+    # Identificadores estándar (palabras clave se reclasificarán después)
+    (r'[a-zA-Z_][a-zA-Z0-9_]*', TT_IDENTIFICADOR),
+    
     # Espacios en blanco (se consumen y se marcan para ser ignorados por el parser)
     (r'\s+', TT_WHITESPACE_SQL), 
 ]
@@ -148,90 +148,58 @@ class LexerTSQL:
                 break # No se puede avanzar más allá del final del código
 
     def tokenizar(self):
-        """
-        Procesa el código fuente completo y devuelve una lista de tokens.
-        Returns:
-            list: Una lista de objetos Token.
-        """
         tokens = []
         while self.posicion_actual < len(self.codigo):
             match_encontrado_en_iteracion = False
-            
-            # Guardar la posición de inicio del token actual antes de buscar coincidencias.
             linea_inicio_token = self.linea_actual
             col_inicio_token = self.columna_actual
 
             for patron_regex, tipo_token_base in ESPECIFICACIONES_TOKEN_SQL:
-                # Compilar el regex. Para SQL, la mayoría de las palabras clave e identificadores
-                # son insensibles a mayúsculas/minúsculas, pero los literales de cadena no.
-                # La insensibilidad para palabras clave se maneja después de identificar un IDENTIFICADOR.
-                # Los patrones de regex para operadores y delimitadores son sensibles a mayúsculas/minúsculas por naturaleza.
-                # Para identificadores, el patrón [a-zA-Z_] ya captura ambas cajas.
-                
-                # re.match solo busca al principio de la cadena (o subcadena desde self.posicion_actual).
                 match = re.match(patron_regex, self.codigo[self.posicion_actual:])
-                
                 if match:
-                    lexema = match.group(0) # El texto completo que coincidió.
+                    lexema = match.group(0)
                     match_encontrado_en_iteracion = True
                     
-                    # Omitir WHITESPACE y COMENTARIOS (no se añaden a la lista final de tokens).
                     if tipo_token_base == TT_WHITESPACE_SQL or \
                        tipo_token_base == TT_COMENTARIO_LINEA or \
                        tipo_token_base == TT_COMENTARIO_BLOQUE:
-                        self._avanzar(len(lexema)) # Avanzar la posición.
-                        break # Salir del bucle for de especificaciones, volver al while.
+                        self._avanzar(len(lexema))
+                        break 
 
                     tipo_token_final = tipo_token_base
-                    valor_final = lexema # Valor por defecto es el lexema.
+                    valor_final = lexema 
 
                     if tipo_token_base == TT_IDENTIFICADOR:
-                        # Verificar si el identificador es una palabra clave.
-                        # SQL es generalmente insensible a mayúsculas/minúsculas para palabras clave.
+                        # Reclasificar si es una palabra clave
                         if lexema.lower() in PALABRAS_CLAVE_SQL:
                             tipo_token_final = TT_PALABRA_CLAVE
-                        # Para identificadores delimitados, el valor es el contenido sin los delimitadores.
+                        # Extraer valor para identificadores delimitados
                         elif lexema.startswith('[') and lexema.endswith(']'):
                             valor_final = lexema[1:-1]
                         elif lexema.startswith('"') and lexema.endswith('"'):
                             valor_final = lexema[1:-1]
-                        # El lexema se guarda tal como aparece en el código.
+                        # Para variables como @nombre, el lexema es el valor
                     
                     elif tipo_token_base == TT_LITERAL_CADENA:
-                        # Quitar comillas simples de inicio/fin y reemplazar '' por '.
                         valor_final = lexema[1:-1].replace("''", "'")
                     
                     elif tipo_token_base == TT_LITERAL_NUMERICO:
-                        # Convertir el lexema a int o float.
                         if '.' in lexema or 'e' in lexema.lower():
-                            try:
-                                valor_final = float(lexema)
-                            except ValueError:
-                                # Si falla la conversión a float (ej. formato de exponente inválido)
-                                # se podría marcar como error o dejar como string.
-                                # Por ahora, se mantiene como lexema si falla float().
-                                print(f"Advertencia LexerSQL: No se pudo convertir '{lexema}' a float.")
-                                valor_final = lexema # Mantener como string si la conversión falla
+                            try: valor_final = float(lexema)
+                            except ValueError: valor_final = lexema 
                         else:
-                            try:
-                                valor_final = int(lexema)
-                            except ValueError:
-                                print(f"Advertencia LexerSQL: No se pudo convertir '{lexema}' a int.")
-                                valor_final = lexema # Mantener como string si la conversión falla
+                            try: valor_final = int(lexema)
+                            except ValueError: valor_final = lexema 
                     
                     tokens.append(Token(tipo_token_final, lexema, linea_inicio_token, col_inicio_token, valor_final))
-                    self._avanzar(len(lexema)) # Avanzar la posición.
-                    break # Salir del bucle for, volver al while para el siguiente token.
+                    self._avanzar(len(lexema))
+                    break 
             
             if not match_encontrado_en_iteracion and self.posicion_actual < len(self.codigo):
-                # Si ninguna especificación coincidió y no hemos llegado al final del código,
-                # es un carácter o secuencia no reconocida.
                 caracter_erroneo = self.codigo[self.posicion_actual]
                 tokens.append(Token(TT_ERROR_SQL, caracter_erroneo, linea_inicio_token, col_inicio_token,
                                     valor=f"Carácter no reconocido: '{caracter_erroneo}'"))
-                self._avanzar() # Avanzar un carácter para evitar un bucle infinito.
-
-        # Añadir el token de Fin de Archivo (EOF) al final de la lista.
+                self._avanzar() 
         tokens.append(Token(TT_EOF_SQL, "EOF", self.linea_actual, self.columna_actual))
         return tokens
 
