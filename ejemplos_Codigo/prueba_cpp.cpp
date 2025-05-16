@@ -1,25 +1,29 @@
+// Ejemplo de Script C++
 #include <iostream>
-#include <vector>
-#include <string>
+#include "mi_cabecera.h" // Cabecera de usuario
 
-// Clase de ejemplo simple
-class MiClaseCpp {
-public:
-    int datoMiembro;
-    MiClaseCpp(int d) : datoMiembro(d) {}
-    void mostrarDato() {
-        std::cout << "El dato es: " << datoMiembro << std::endl;
-    }
-};
+/*
+  Comentario de bloque
+  para C++.
+*/
 
-int main(int argc, char *argv[]) {
-    std::cout << "¡Hola desde C++ en el simulador!" << std::endl;
-    for (int i = 0; i < 3; ++i) {
-        // Un bucle simple
-    }
-    MiClaseCpp objeto(123);
-    objeto.mostrarDato();
-    /* Comentario
-       multilínea C++ */
+namespace MyNamespace {
+    class MiClase {
+    public:
+        int miMetodo(char param) {
+            return 0;
+        }
+    };
+}
+
+int main() {
+    std::cout << "Hola desde C++!" << std::endl;
+    int numero = 123;
+    float flotante = 3.14f;
+    char caracter = 'a';
+    // Directiva ifdef
+    #ifdef DEBUG
+        std::cout << "Modo DEBUG activado." << std::endl;
+    #endif
     return 0;
 }

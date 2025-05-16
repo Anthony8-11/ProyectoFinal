@@ -7,7 +7,7 @@ import pytz # Para la fecha/hora
 # --- CONTROL DE CONFIGURACIÓN PARA PRUEBAS ---
 # Para probar un solo archivo, pon su nombre aquí (ej. "prueba_pascal.pas").
 # Si es None, se probarán todos los archivos en la lista archivos_a_probar.
-ARCHIVO_ESPECIFICO_A_PROBAR = "prueba_tsql.sql" 
+ARCHIVO_ESPECIFICO_A_PROBAR = "prueba_cpp.cpp" 
 # ARCHIVO_ESPECIFICO_A_PROBAR = "prueba_tsql.sql" # Ejemplo para probar solo T-SQL
 # ARCHIVO_ESPECIFICO_A_PROBAR = "prueba_pascal.pas" # Ejemplo para probar solo Pascal
 # --- FIN DE CONTROL DE CONFIGURACIÓN ---
@@ -28,6 +28,13 @@ try:
     from simulador_ejecucion.interprete_tsql import InterpreteTSQL #T_SQL
     from analizador_sintactico.parser_pascal import ParserPascal #PASCAL
     from simulador_ejecucion.interprete_pascal import InterpretePascal #PASCAL
+    from analizador_lexico.lexer_javascript import LexerJavaScript, TT_ERROR_JS, TT_EOF_JS #JAVASCRIPT
+    from analizador_sintactico.parser_javascript import ParserJavaScript #JAVASCRIPT
+    from simulador_ejecucion.interprete_javascript import InterpreteJavaScript #JAVASCRIPT
+    # IMPORTACIÓN PARA LEXER C++ ---
+    from analizador_lexico.lexer_cpp import LexerCPP, TT_ERROR_CPP, TT_EOF_CPP
+
+
 
 except ImportError as e_import:
     print(f"Error de Importación Específico: {e_import}")
@@ -219,12 +226,6 @@ def analizar_archivo_y_mostrar(ruta_archivo, nombre_archivo_simple):
                         except Exception as e_interp_tsql:
                             print(f"ERROR CRÍTICO durante la simulación de T-SQL: {e_interp_tsql}")
                             # import traceback; traceback.print_exc() # Descomentar para más detalles
-                        
-                        # Aquí iría la llamada al intérprete/simulador de T-SQL si lo tuviéramos
-                        # print("\n--- Simulación de Ejecución (T-SQL) ---")
-                        # interprete_tsql = InterpreteTSQL(parser_tsql_instancia.tabla_simbolos) # Si se usa tabla de símbolos
-                        # interprete_tsql.interpretar(ast_generado_tsql)
-                        # print("--- Fin Simulación de Ejecución (T-SQL) ---")
 
                     elif not tiene_errores_lexicos_tsql and \
                          (parser_tsql_instancia is None or (hasattr(parser_tsql_instancia, 'errores_sintacticos') and not parser_tsql_instancia.errores_sintacticos)):
@@ -235,6 +236,113 @@ def analizar_archivo_y_mostrar(ruta_archivo, nombre_archivo_simple):
                     # import traceback; traceback.print_exc() # Descomentar para más detalles
             print("--- Fin Procesamiento T-SQL ---")
 
+        # --- BLOQUE PARA JAVASCRIPT ---
+        elif lenguaje_detectado == "JavaScript":
+            print("\n--- Análisis Léxico (JavaScript) ---")
+            ast_generado_js = None
+            parser_js_instancia = None
+
+            if not codigo_completo_str.strip():
+                print("El código JavaScript para el análisis léxico está vacío.")
+            else:
+                try:
+                    # Fase Léxica para JavaScript
+                    lexer_js = LexerJavaScript(codigo_completo_str)
+                    tokens_obtenidos_js = lexer_js.tokenizar()
+                    
+                    print(f"Total de tokens generados (JavaScript): {len(tokens_obtenidos_js)}")
+                    tiene_errores_lexicos_js = any(t.tipo == TT_ERROR_JS for t in tokens_obtenidos_js)
+                    
+                    # (Descomentar para imprimir tokens de JavaScript)
+                    # for i, token_obj in enumerate(tokens_obtenidos_js): 
+                    #     print(f"  {i+1:03d}: {token_obj}") 
+                    
+                    if tiene_errores_lexicos_js:
+                        print(">>> Se encontraron errores léxicos en el código JavaScript. <<<")
+                    elif tokens_obtenidos_js and tokens_obtenidos_js[-1].tipo == TT_EOF_JS:
+                        print(">>> Análisis léxico de JavaScript completado sin errores aparentes (finalizado con EOF). <<<")
+                    else:
+                        print(">>> Problema con la salida del lexer de JavaScript. <<<")
+
+                    # Fase Sintáctica para JavaScript (solo si la léxica fue exitosa)
+                    if not tiene_errores_lexicos_js and \
+                       tokens_obtenidos_js and \
+                       tokens_obtenidos_js[-1].tipo == TT_EOF_JS:
+                        
+                        print("\n--- Análisis Sintáctico (JavaScript) ---")
+                        try:
+                            parser_js_instancia = ParserJavaScript(tokens_obtenidos_js)
+                            ast_generado_js = parser_js_instancia.parse()
+                            # Los mensajes de éxito/error del parsing ya se imprimen desde parser_js_instancia.parse()
+                        except Exception as e_parse_js:
+                            print(f"ERROR CRÍTICO en la ejecución del Parser de JavaScript: {e_parse_js}")
+                            import traceback; traceback.print_exc() # Para más detalles del error del parser
+                    else:
+                        print("\n--- Análisis Sintáctico (JavaScript) ---")
+                        print("No se realizó el análisis sintáctico debido a errores léxicos o problemas con los tokens.")
+                    print("--- Fin Análisis Sintáctico (JavaScript) ---")
+
+                    # Visualización del AST de JavaScript (si se generó)
+                    if ast_generado_js:
+                        print("\n--- Árbol de Sintaxis Abstracto (AST) Generado (JavaScript) ---")
+                        # print(ast_generado_js) # Imprime usando los __repr__ de los nodos AST de JS
+                        print("--- Fin del AST (JavaScript) ---")
+
+                        print("\n--- Simulación de Ejecución (JavaScript) ---") 
+                        try:
+                            # El intérprete JS maneja sus propios alcances y objetos globales internamente.
+                            interprete_js = InterpreteJavaScript() 
+                            interprete_js.interpretar_script(ast_generado_js)
+                        except Exception as e_interp_js:
+                            print(f"ERROR CRÍTICO durante la simulación de JavaScript: {e_interp_js}")
+                            import traceback; traceback.print_exc()
+                        
+                        # Aquí iría la llamada al intérprete/simulador de JavaScript si lo tuviéramos
+                        # print("\n--- Simulación de Ejecución (JavaScript) ---")
+                        # interprete_js = InterpreteJavaScript(parser_js_instancia.tabla_simbolos) # Si usa tabla de símbolos
+                        # interprete_js.interpretar(ast_generado_js)
+                        # print("--- Fin Simulación de Ejecución (JavaScript) ---")
+
+                    elif not tiene_errores_lexicos_js and \
+                         (parser_js_instancia is None or (hasattr(parser_js_instancia, 'errores_sintacticos') and not parser_js_instancia.errores_sintacticos)):
+                        print("\nNo se generó un AST para JavaScript, aunque no se reportaron errores explícitos (revisar lógica del parser).")
+
+                except Exception as e_proc_js:
+                    print(f"ERROR SEVERO durante el procesamiento de JavaScript: {e_proc_js}")
+                    import traceback; traceback.print_exc() # Para más detalles
+            print("--- Fin Procesamiento JavaScript ---")
+
+        # --- BLOQUE PARA C++ ---
+        elif lenguaje_detectado == "C++":
+            print("\n--- Análisis Léxico (C++) ---")
+            if not codigo_completo_str.strip():
+                print("El código C++ para el análisis léxico está vacío.")
+            else:
+                try:
+                    lexer_cpp = LexerCPP(codigo_completo_str)
+                    tokens_obtenidos_cpp = lexer_cpp.tokenizar()
+                    
+                    print(f"Total de tokens generados (C++): {len(tokens_obtenidos_cpp)}")
+                    tiene_errores_lexicos_cpp = False
+                    for i, token_obj in enumerate(tokens_obtenidos_cpp): # Imprimir tokens C++
+                        print(f"  {i+1:03d}: {token_obj}") 
+                        if token_obj.tipo == TT_ERROR_CPP:
+                            tiene_errores_lexicos_cpp = True
+                    
+                    if tiene_errores_lexicos_cpp:
+                        print(">>> Se encontraron errores léxicos en el código C++. <<<")
+                    elif tokens_obtenidos_cpp and tokens_obtenidos_cpp[-1].tipo == TT_EOF_CPP:
+                        print(">>> Análisis léxico de C++ completado sin errores aparentes (finalizado con EOF). <<<")
+                    else:
+                        print(">>> Problema con la salida del lexer de C++ (no finalizó con EOF o no generó tokens). <<<")
+
+                except Exception as e_lex_cpp:
+                    print(f"ERROR SEVERO durante el análisis léxico de C++: {e_lex_cpp}")
+                    import traceback
+                    traceback.print_exc()
+            print("--- Fin Análisis Léxico (C++) ---")
+
+#FIN
         else:
             print(f"Análisis detallado para '{lenguaje_detectado}' no implementado aún.")
 

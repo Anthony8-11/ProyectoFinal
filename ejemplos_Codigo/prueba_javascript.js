@@ -1,41 +1,35 @@
-// Comentario de una línea en JavaScript
+// Ejemplo de Script JavaScript
+console.log("Hola desde JavaScript!");
+
+function saludar(nombre) {
+    let saludoCompleto = "Hola, " + nombre + ". ¿Cómo estás?";
+    return saludoCompleto;
+}
+
+var nombreUsuario = "Mundo";
+const PI = 3.14159;
+let edad = 30;
+let esMayor = edad >= 18; // true
+
 /*
-  Comentario multilínea
-  en JavaScript.
+  Este es un comentario
+  de múltiples líneas.
 */
-function calcularTotal(precio, cantidad) {
-    let subtotal = precio * cantidad; // Cálculo simple
-    const impuesto = 0.12; // 12% de impuesto
-    let totalConImpuesto = subtotal * (1 + impuesto);
-    return totalConImpuesto.toFixed(2); // Redondear a 2 decimales
+
+if (esMayor) {
+    console.log(saludar(nombreUsuario));
+} else {
+    alert("Eres menor de edad.");
 }
 
-var producto = "Laptop";
-let precioUnitario = 750.99;
-const cantidadComprada = 2;
-
-let totalFactura = calcularTotal(precioUnitario, cantidadComprada);
-
-console.log(`Producto: ${producto}`);
-console.log(`Precio Unitario: $${precioUnitario}`);
-console.log(`Cantidad: ${cantidadComprada}`);
-console.log(`Total a Pagar: $${totalFactura}`);
-
-if (cantidadComprada > 1) {
-    document.getElementById("mensaje").innerHTML = "¡Gracias por comprar múltiples unidades!";
+for (let i = 0; i < 3; i++) {
+    console.log(`Iteración del bucle for: ${i}`);
 }
 
-// Ejemplo de clase en ES6
-class Usuario {
-    constructor(nombre, email) {
-        this.nombre = nombre;
-        this.email = email;
-    }
+let numeros = [10, 20, 30.5, 0xFF];
+let objeto = {
+    clave: "valor",
+    numero: 123
+};
 
-    presentarse() {
-        console.log(`Hola, soy ${this.nombre} y mi email es ${this.email}.`);
-    }
-}
-const user1 = new Usuario("Ana", "ana@example.com");
-user1.presentarse();
-async function obtenerDatos() { return "datos"; }
+// Fin del script de prueba

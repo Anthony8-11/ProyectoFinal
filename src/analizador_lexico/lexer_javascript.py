@@ -86,6 +86,90 @@ IDENTIFICADORES_ESPECIALES_JS = {
     'console', 'log', 'alert', 'document', 'window' # Objetos/métodos comunes
 }
 
+# Especificaciones de los tokens para JavaScript.
+# El orden es importante.
+ESPECIFICACIONES_TOKEN_JS = [
+    # Comentarios (deben ir primero para que no interfieran con el operador de división)
+    (r'//[^\n\r]*', TT_COMENTARIO_LINEA),      # Comentario de línea
+    (r'/\*[\s\S]*?\*/', TT_COMENTARIO_BLOQUE), # Comentario de bloque (no anidado)
+
+    # Plantillas literales (backticks). Captura todo el contenido, incluyendo ${...}.
+    # El \` se maneja para escapar backticks dentro de la plantilla.
+    # El [^`] captura cualquier carácter que no sea un backtick.
+    # El [\s\S] dentro de ${} es para permitir cualquier carácter, incluyendo saltos de línea.
+    (r'`(?:\\`|\\\$|\$\{[\s\S]*?\}|[^`])*`', TT_LITERAL_CADENA), # Plantilla literal
+
+    # Cadenas con comillas dobles. Permite caracteres Unicode (incluyendo acentuados)
+    # y secuencias de escape comunes.
+    (r'"(?:\\(?:[bfnrtv"\'\\]|u[0-9a-fA-F]{4}|x[0-9a-fA-F]{2})|[^"\\])*"', TT_LITERAL_CADENA),
+
+    # Cadenas con comillas simples. Similar a comillas dobles.
+    (r"'(?:\\(?:[bfnrtv\"\'\\]|u[0-9a-fA-F]{4}|x[0-9a-fA-F]{2})|[^'\\])*'", TT_LITERAL_CADENA),
+
+    # Literales de cadena (simples y dobles, con manejo básico de escapes)
+    # Este regex es simplificado y no maneja todos los escapes de JS.
+    (r'"(?:\\.|[^"\\])*"', TT_LITERAL_CADENA),  # Comillas dobles
+    (r"' (?:\\.|[^'\\])*'", TT_LITERAL_CADENA),  # Comillas simples
+    # Plantillas literales (``) son más complejas debido a las expresiones ${...}
+    # (r'`(?:\\.|[^`\\])*`', TT_LITERAL_CADENA_PLANTILLA), # Simplificado, sin interpolación
+
+    # Números: hexadecimales, binarios, octales (nuevos), decimales, y con exponente.
+    (r'0[xX][0-9a-fA-F]+', TT_LITERAL_NUMERICO), # Hexadecimal
+    (r'0[bB][01]+', TT_LITERAL_NUMERICO),       # Binario
+    (r'0[oO][0-7]+', TT_LITERAL_NUMERICO),       # Octal (ES6+)
+    # Números decimales y con exponente. Debe ir después de los anteriores.
+    # Permite .123, 123., 123.456, 1e5, 1.2e-3, etc.
+    (r'[+-]?(\d+\.\d*|\.\d+)([eE][+-]?\d+)?', TT_LITERAL_NUMERICO), # Decimales
+    (r'[+-]?\d+([eE][+-]?\d+)?', TT_LITERAL_NUMERICO),             # Enteros
+
+    # Operadores (el orden puede ser importante para los de múltiples caracteres)
+    # Operadores de asignación compuestos
+    (r'>>>=|>>=|<<=|\|\|=|\&\&=|\?\?=', TT_OPERADOR_ASIGNACION), # Asignación lógica nullish, OR, AND
+    (r'\+=|-=|\*=|\/=|%=|\*\*=|&=|\^=|\|=', TT_OPERADOR_ASIGNACION),
+    # Operadores lógicos y nullish coalescing
+    (r'\|\||&&|\?\?', TT_OPERADOR_LOGICO),
+    # Operadores bitwise
+    (r'>>>|<<|>>', TT_OPERADOR_BITWISE),
+    # Operadores de comparación (incluyendo estrictos)
+    (r'===|!==|==|!=|<=|>=|<|>', TT_OPERADOR_COMPARACION),
+    # Flecha para funciones
+    (r'=>', TT_FLECHA),
+    # Operador Spread/Rest
+    (r'\.\.\.', TT_OPERADOR_SPREAD),
+    # Operadores aritméticos (incluyendo incremento/decremento y exponenciación)
+    (r'\+\+|--', TT_OPERADOR_ARITMETICO), # Incremento/Decremento
+    (r'\*\*', TT_OPERADOR_ARITMETICO),   # Exponenciación
+    (r'[\+\-\*\/%]', TT_OPERADOR_ARITMETICO), # +, -, *, /, %
+    # Operadores bitwise simples
+    (r'[&|\^~]', TT_OPERADOR_BITWISE),
+    # Operador de asignación simple
+    (r'=', TT_OPERADOR_ASIGNACION),
+    # Operador lógico NOT
+    (r'!', TT_OPERADOR_LOGICO), # También puede ser parte de !=, !==
+    # Operador ternario
+    (r'\?', TT_OPERADOR_TERNARIO),
+    
+    # Delimitadores
+    (r'\(', TT_PARENTESIS_IZQ),
+    (r'\)', TT_PARENTESIS_DER),
+    (r'\{', TT_LLAVE_IZQ),
+    (r'\}', TT_LLAVE_DER),
+    (r'\[', TT_CORCHETE_IZQ),
+    (r'\]', TT_CORCHETE_DER),
+    (r';', TT_PUNTO_Y_COMA),
+    (r',', TT_COMA),
+    (r'\.', TT_PUNTO),
+    (r':', TT_DOS_PUNTOS_TERNARIO), # También usado en objetos y etiquetas
+
+    # Identificadores (deben ir después de palabras clave si no se reclasifican,
+    # o antes si se reclasifican después). Aquí los ponemos y luego reclasificamos.
+    # Un identificador JS puede empezar con letra, $, o _, seguido de esos o números.
+    (r'[a-zA-Z_$][a-zA-Z0-9_$]*', TT_IDENTIFICADOR),
+
+    # Espacios en blanco (se ignorarán pero deben ser consumidos)
+    (r'\s+', TT_WHITESPACE_JS), 
+]
+
 class LexerJavaScript:
     """
     Analizador Léxico para un subconjunto de JavaScript.
@@ -108,6 +192,43 @@ class LexerJavaScript:
             else:
                 break 
 
+    def _procesar_valor_cadena(self, lexema):
+        """
+        Procesa el lexema de una cadena para obtener su valor real,
+        manejando escapes básicos y quitando las comillas/acentos graves.
+        """
+        if lexema.startswith('`') and lexema.endswith('`'):
+            # Para plantillas literales, por ahora devolvemos el contenido interno tal cual,
+            # incluyendo las interpolaciones ${...} sin procesar.
+            # Un manejo más avanzado podría parsear las interpolaciones.
+            contenido = lexema[1:-1]
+            # Simplificación de escapes comunes dentro de plantillas
+            contenido = contenido.replace('\\`', '`')
+            contenido = contenido.replace('\\\\', '\\')
+            # No procesamos ${} aquí, se queda como parte de la cadena.
+            return contenido
+        elif (lexema.startswith('"') and lexema.endswith('"')) or \
+             (lexema.startswith("'") and lexema.endswith("'")):
+            contenido = lexema[1:-1]
+            # Un decodificador de escapes más robusto sería mejor.
+            # Esto es una aproximación simple.
+            try:
+                # Intenta usar 'unicode_escape' para manejar escapes comunes como \n, \t, \uXXXX
+                # Cuidado: esto puede tener comportamientos inesperados con barras invertidas literales.
+                # Una solución más robusta iteraría y reemplazaría escapes conocidos.
+                # Ejemplo simple (no exhaustivo):
+                processed_content = contenido.replace('\\n', '\n')
+                processed_content = processed_content.replace('\\r', '\r')
+                processed_content = processed_content.replace('\\t', '\t')
+                processed_content = processed_content.replace("\\'", "'")
+                processed_content = processed_content.replace('\\"', '"')
+                processed_content = processed_content.replace('\\\\', '\\')
+                # Faltarían \b, \f, \v, \xHH, \uHHHH, etc.
+                return processed_content
+            except Exception:
+                return contenido # Devolver el contenido tal cual si hay error en el decode
+        return lexema # Fallback
+
     def tokenizar(self):
         """
         Procesa el código fuente completo y devuelve una lista de tokens.
@@ -119,8 +240,6 @@ class LexerJavaScript:
             col_inicio_token = self.columna_actual
 
             for patron_regex, tipo_token_base in ESPECIFICACIONES_TOKEN_JS:
-                # JavaScript es sensible a mayúsculas/minúsculas, por lo que no usamos re.IGNORECASE
-                # a menos que una regla específica lo necesite (no es común para el lexer).
                 match = re.match(patron_regex, self.codigo[self.posicion_actual:])
                 
                 if match:
@@ -137,54 +256,29 @@ class LexerJavaScript:
                     valor_final = lexema 
 
                     if tipo_token_base == TT_IDENTIFICADOR:
-                        # JavaScript es sensible a mayúsculas/minúsculas para palabras clave.
                         if lexema in PALABRAS_CLAVE_JS:
                             tipo_token_final = TT_PALABRA_CLAVE
-                            # Para 'true', 'false', 'null', el valor podría ser el booleano/None de Python.
                             if lexema == 'true': valor_final = True
                             elif lexema == 'false': valor_final = False
                             elif lexema == 'null': valor_final = None
-                        # Podríamos tener una lógica para IDENTIFICADORES_ESPECIALES_JS aquí si queremos
-                        # darles un tipo de token diferente o un valor especial.
-                        # Por ejemplo, para 'undefined', valor_final podría ser un objeto especial o None.
                         elif lexema == 'undefined':
-                            # tipo_token_final = TT_LITERAL_UNDEFINED # Si tuviéramos este tipo
-                            valor_final = None # Representando undefined como None de Python
+                            valor_final = None # Representando undefined como None
                         elif lexema == 'NaN':
                             valor_final = float('nan')
                         elif lexema == 'Infinity':
                             valor_final = float('inf')
                     
                     elif tipo_token_base == TT_LITERAL_CADENA:
-                        # Quitar comillas y procesar secuencias de escape.
-                        # Esta es una simplificación. Un manejo completo de escapes es más complejo.
-                        comilla = lexema[0]
-                        if lexema.startswith(comilla) and lexema.endswith(comilla):
-                            valor_final = lexema[1:-1]
-                            # Ejemplo de manejo simple de algunos escapes:
-                            valor_final = valor_final.replace(f'\\{comilla}', comilla) # Comilla escapada
-                            valor_final = valor_final.replace('\\\\', '\\')     # Barra invertida escapada
-                            valor_final = valor_final.replace('\\n', '\n')      # Nueva línea
-                            valor_final = valor_final.replace('\\r', '\r')      # Retorno de carro
-                            valor_final = valor_final.replace('\\t', '\t')      # Tabulación
-                            # Faltarían \b, \f, \v, \0, \xHH, \uHHHH, \u{HHHHH}
+                        valor_final = self._procesar_valor_cadena(lexema)
                     
                     elif tipo_token_base == TT_LITERAL_NUMERICO:
                         try:
-                            if lexema.lower().startswith('0x'):
-                                valor_final = int(lexema, 16)
-                            elif lexema.lower().startswith('0b'):
-                                valor_final = int(lexema, 2)
-                            elif lexema.lower().startswith('0o'):
-                                valor_final = int(lexema, 8)
-                            elif '.' in lexema or 'e' in lexema.lower():
-                                valor_final = float(lexema)
-                            else:
-                                valor_final = int(lexema)
+                            if lexema.lower().startswith('0x'): valor_final = int(lexema, 16)
+                            elif lexema.lower().startswith('0b'): valor_final = int(lexema, 2)
+                            elif lexema.lower().startswith('0o'): valor_final = int(lexema, 8)
+                            elif '.' in lexema or 'e' in lexema.lower(): valor_final = float(lexema)
+                            else: valor_final = int(lexema)
                         except ValueError:
-                            # Si la conversión falla (ej. '1.2.3' o un formato numérico inválido no capturado por regex)
-                            print(f"Advertencia LexerJS: No se pudo convertir el literal numérico '{lexema}' a número.")
-                            # Se podría marcar como TT_ERROR_JS o dejar el valor como el lexema.
                             tipo_token_final = TT_ERROR_JS
                             valor_final = f"Literal numérico inválido: {lexema}"
                     
