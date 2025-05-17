@@ -58,6 +58,7 @@ TT_PUNTO_Y_COMA = 'PUNTO_Y_COMA_CPP'  # ;
 TT_COMA = 'COMA_CPP'                  # ,
 TT_DOS_PUNTOS = 'DOS_PUNTOS_CPP'
 TT_PUNTO = 'PUNTO_CPP'       # : (para etiquetas, herencia, ternario)
+TT_ASTERISCO = 'ASTERISCO_PP'
 
 # Comentarios
 TT_COMENTARIO_LINEA = 'COMENTARIO_LINEA_CPP'  # // Esto es un comentario
@@ -84,7 +85,7 @@ PALABRAS_CLAVE_CPP = {
     'union', 'unsigned', 'using', 'virtual', 'void', 'volatile', 'wchar_t', 
     'while', 'xor', 'xor_eq',
     # Palabras clave comunes para el simulador
-    'cout', 'cin', 'endl', 'std', 'main', 'include', 'define', 'iostream', 'vector', 'string'
+    'include', 'define', 'iostream', 'vector', 'string'
     # 'iostream', 'vector', 'string' no son keywords per se, pero se usan en #include
     # y 'std', 'cout', 'cin', 'endl', 'main' son identificadores muy comunes.
     # Es mejor que el lexer los marque como IDENTIFICADOR y el parser/semántico les dé significado.
@@ -103,51 +104,45 @@ ESPECIFICACIONES_TOKEN_CPP = [
     # 1. Directivas de preprocesador (líneas que comienzan con #)
     # Esta es una simplificación. Un preprocesador real es más complejo.
     # Captura toda la línea después de # hasta el salto de línea.
-    (r'#\s*([a-zA-Z_][a-zA-Z0-9_]*)(.*)', TT_DIRECTIVA_PREPROCESADOR), # Captura la directiva y el resto
-
-    # 2. Comentarios (deben ir antes de operadores como / o *)
-    (r'//[^\n\r]*', TT_COMENTARIO_LINEA),      # Comentario de línea
-    (r'/\*[\s\S]*?\*/', TT_COMENTARIO_BLOQUE), # Comentario de bloque (no anidado simple)
-
-    # 3. Literales
-    # Cadenas Raw C++11: R"delim(...)delim"
+    (r'#\s*([a-zA-Z_][a-zA-Z0-9_]*)(.*)', TT_DIRECTIVA_PREPROCESADOR),
+    (r'//[^\n\r]*', TT_COMENTARIO_LINEA),
+    (r'/\*[\s\S]*?\*/', TT_COMENTARIO_BLOQUE),
     (r'R"([^\s()\\\t\n\r]*)\([\s\S]*?\)\1"', TT_LITERAL_CADENA), 
-    # Cadenas (con escapes simples). Prefijos L, u, U, u8 se pueden añadir.
     (r'(L|u8|u|U)?"(?:\\.|[^"\\])*"', TT_LITERAL_CADENA),
-    (r"(L|u8|u|U)?'(?:\\.|[^'\\])*'", TT_LITERAL_CARACTER), # Caracteres (con escapes simples)
-    
-    # Números:
-    # Hexadecimales (0x...), Binarios (0b...), Octales (0...)
+    (r"(L|u8|u|U)?'(?:\\.|[^'\\])*'", TT_LITERAL_CARACTER),
     (r'0[xX][0-9a-fA-F]+[ulUL]{0,2}', TT_LITERAL_ENTERO), 
     (r'0[bB][01]+[ulUL]{0,2}', TT_LITERAL_ENTERO),    
-    (r'0[0-7]*[ulUL]{0,2}', TT_LITERAL_ENTERO), # Octales (0, 01, 077) o solo 0
-    # Flotantes: 1.0, .5, 1e5, 1.2E-5, 3.14f, 0.5L (con sufijos f, F, l, L)
+    (r'0[0-7]*[ulUL]{0,2}', TT_LITERAL_ENTERO), 
     (r'[+-]?(\d+\.\d*|\.\d+)([eE][+-]?\d+)?[fFLl]?', TT_LITERAL_FLOTANTE),
-    # Enteros decimales (con sufijos u, U, l, L, ll, LL, ul, Ul, uL, UL, ull, Ull, uLL, ULL)
     (r'[+-]?\d+([eE][+-]?\d+)?[ulUL]{0,3}', TT_LITERAL_ENTERO), 
     
-    # 4. Operadores (de más largo a más corto para evitar ambigüedades)
-    (r'->\*|->|\+\+|--|<<=|>>=|::', TT_OPERADOR_MIEMBRO), # :: también es operador de alcance
-    (r'\.\*', TT_OPERADOR_MIEMBRO), # .* (puntero a miembro)
-    (r'<=|>=|==|!=|&&|\|\|', TT_OPERADOR_COMPARACION), # &&, || son lógicos pero se agrupan aquí
-    (r'\+=|-=|\*=|/=|%=|&=|\^=|\|=|<<|>>', TT_OPERADOR_ASIGNACION), # << y >> también son bitwise
-    (r'[+\-*/%&|^!~<>=?:]', TT_OPERADOR_ARITMETICO), # Incluye bitwise y lógicos de un caracter, y ternario. El tipo se refinará.
-                                                 # <, > también son relacionales.
-                                                 # : también es delimitador.
-
-    # 5. Delimitadores y Puntuación
+    # Operadores (ordenados de más largos a más cortos o por especificidad)
+    (r'->\*|->|::', TT_OPERADOR_MIEMBRO),
+    (r'\+\+|--', TT_OPERADOR_ARITMETICO), # Incremento/Decremento
+    (r'<<=|>>=', TT_OPERADOR_ASIGNACION), # Asignación con shift
+    (r'<<|>>', TT_OPERADOR_BITWISE),     # Operadores de shift (también usados para streams)
+    (r'<=|>=|==|!=|<|>', TT_OPERADOR_COMPARACION),
+    (r'&&|\|\|', TT_OPERADOR_LOGICO),
+    (r'\+=|-=|\*=|/=|%=|&=|\^=|\|=', TT_OPERADOR_ASIGNACION), # Otros de asignación compuesta
+    #(r'\.\*', TT_OPERADOR_MIEMBRO),
+    (r'\*', TT_OPERADOR_ARITMETICO), # Multiplicación (después de ->* y .*)
+    (r'[\+\-\/%]', TT_OPERADOR_ARITMETICO), # +, -, /, %
+    (r'[&|\^~]', TT_OPERADOR_BITWISE), # Bitwise simples y <, > (que también son comparación)
+                                        # El parser distinguirá <, > como comparación si procede.
+    (r'=', TT_OPERADOR_ASIGNACION), # Asignación simple
+    (r'!', TT_OPERADOR_LOGICO),
+    (r'\?', TT_OPERADOR_TERNARIO),
+    
     (r'\{', TT_LLAVE_IZQ), (r'\}', TT_LLAVE_DER),
     (r'\(', TT_PARENTESIS_IZQ), (r'\)', TT_PARENTESIS_DER),
     (r'\[', TT_CORCHETE_IZQ), (r'\]', TT_CORCHETE_DER),
     (r';', TT_PUNTO_Y_COMA),
     (r',', TT_COMA),
-    (r'\.', TT_PUNTO), # Acceso a miembro, también parte de flotantes.
+    (r'\.', TT_PUNTO), 
+    (r':', TT_DOS_PUNTOS),
+    (r'\*', TT_ASTERISCO),
 
-    # 6. Identificadores y Palabras Clave
-    # Un identificador C++ puede empezar con letra o _, seguido de letras, números o _.
     (r'[a-zA-Z_][a-zA-Z0-9_]*', TT_IDENTIFICADOR),
-
-    # 7. Espacios en blanco (se ignorarán pero deben ser consumidos por el lexer)
     (r'\s+', TT_WHITESPACE_CPP),
 ]
 
@@ -212,126 +207,93 @@ class LexerCPP:
             match_encontrado_en_iteracion = False
             linea_inicio_token = self.linea_actual
             col_inicio_token = self.columna_actual
-
-            # Manejo especial para directivas de preprocesador al inicio de una línea (después de espacios opcionales)
-            # Esto es una simplificación; un preprocesador real es más complejo.
             subcadena_actual = self.codigo[self.posicion_actual:]
             match_espacios_inicio_linea = re.match(r'^[ \t]*', subcadena_actual)
             pos_despues_espacios = self.posicion_actual + len(match_espacios_inicio_linea.group(0))
 
             if pos_despues_espacios < len(self.codigo) and self.codigo[pos_despues_espacios] == '#':
-                # Potencial directiva de preprocesador
-                # Usar la especificación de TT_DIRECTIVA_PREPROCESADOR
-                patron_directiva_regex, tipo_directiva = ESPECIFICACIONES_TOKEN_CPP[0] # Asumiendo que es la primera
+                patron_directiva_regex, tipo_directiva = ESPECIFICACIONES_TOKEN_CPP[0] 
                 if tipo_directiva == TT_DIRECTIVA_PREPROCESADOR:
-                    # Aplicar el regex desde la posición después de los espacios iniciales
                     match_dir = re.match(patron_directiva_regex, self.codigo[pos_despues_espacios:])
                     if match_dir:
-                        # Consumir los espacios iniciales
                         self._avanzar(len(match_espacios_inicio_linea.group(0))) 
-                        # El token de directiva se crea y consume dentro de _procesar_directiva
                         token_directiva = self._procesar_directiva_preprocesador(match_dir)
                         tokens.append(token_directiva)
-                        self._avanzar(len(match_dir.group(0))) # Avanzar por el resto de la directiva
+                        self._avanzar(len(match_dir.group(0))) 
                         match_encontrado_en_iteracion = True
-                        continue # Volver al inicio del bucle while
+                        continue 
 
-            # Si no es una directiva, proceder con las especificaciones normales
             for patron_regex, tipo_token_base in ESPECIFICACIONES_TOKEN_CPP:
-                if tipo_token_base == TT_DIRECTIVA_PREPROCESADOR: # Ya manejado arriba
+                if tipo_token_base == TT_DIRECTIVA_PREPROCESADOR: 
                     continue
-
                 match = re.match(patron_regex, self.codigo[self.posicion_actual:])
-                
                 if match:
                     lexema = match.group(0)
                     match_encontrado_en_iteracion = True
-                    
                     if tipo_token_base == TT_WHITESPACE_CPP or \
                        tipo_token_base == TT_COMENTARIO_LINEA or \
                        tipo_token_base == TT_COMENTARIO_BLOQUE:
                         self._avanzar(len(lexema))
                         break 
-
                     tipo_token_final = tipo_token_base
                     valor_final = lexema 
-
                     if tipo_token_base == TT_IDENTIFICADOR:
-                        if lexema in PALABRAS_CLAVE_CPP: # C++ es sensible a mayúsculas/minúsculas
+                        if lexema in PALABRAS_CLAVE_CPP: 
                             tipo_token_final = TT_PALABRA_CLAVE
                             if lexema == 'true': valor_final = True
                             elif lexema == 'false': valor_final = False
-                            elif lexema == 'nullptr': valor_final = None # O un objeto especial
-                        elif lexema.startswith('[') and lexema.endswith(']'): # Identificador delimitado
+                            elif lexema == 'nullptr': valor_final = None 
+                        elif lexema.startswith('[') and lexema.endswith(']'): 
                             valor_final = lexema[1:-1]
-                        elif lexema.startswith('"') and lexema.endswith('"'): # Identificador delimitado
+                        elif lexema.startswith('"') and lexema.endswith('"'):
                              valor_final = lexema[1:-1]
-                    
                     elif tipo_token_base == TT_LITERAL_CADENA:
-                        # Quitar comillas y procesar escapes. Esto es una simplificación.
-                        # También manejar prefijos L, u8, u, U y R"()"
-                        if lexema.startswith('R"'): # Raw string
-                            # Extraer el delimitador y el contenido
+                        if lexema.startswith('R"'): 
                             match_raw = re.match(r'R"([^\s()\\\t\n\r]*)\(([\s\S]*?)\)\1"', lexema)
-                            if match_raw:
-                                valor_final = match_raw.group(2)
-                        else: # Cadena normal o con prefijo L, u8, u, U
+                            if match_raw: valor_final = match_raw.group(2)
+                        else: 
                             prefijo_match = re.match(r'^(L|u8|u|U)?(".*")', lexema)
                             cadena_real = prefijo_match.group(2) if prefijo_match else lexema
                             valor_final = cadena_real[1:-1] 
-                            # Aquí iría un manejo de secuencias de escape más robusto
                             valor_final = valor_final.replace('\\n', '\n').replace('\\t', '\t').replace('\\"', '"').replace("\\'", "'").replace('\\\\', '\\')
-                    
                     elif tipo_token_base == TT_LITERAL_CARACTER:
-                        valor_final = lexema[1:-1] # Quitar comillas simples
-                        # Manejar escapes: '\n', '\\', '\'', '\"', '\xHH', '\OOO'
+                        valor_final = lexema[1:-1] 
                         if valor_final.startswith('\\'):
                             if valor_final == '\\n': valor_final = '\n'
                             elif valor_final == '\\t': valor_final = '\t'
-                            # Añadir más escapes
-                    
                     elif tipo_token_base == TT_LITERAL_ENTERO:
                         try:
-                            if lexema.lower().startswith('0x'): valor_final = int(lexema, 16)
-                            elif lexema.lower().startswith('0b'): valor_final = int(lexema, 2)
-                            elif lexema.startswith('0') and len(lexema) > 1 and lexema[1] in '01234567': valor_final = int(lexema, 8)
-                            else: valor_final = int(lexema)
+                            temp_lexema = lexema
+                            for suffix in ['ull', 'Ull', 'uLL', 'ULL', 'ul', 'Ul', 'uL', 'UL', 'll', 'LL', 'l', 'L', 'u', 'U']:
+                                if temp_lexema.lower().endswith(suffix.lower()):
+                                    temp_lexema = temp_lexema[:-len(suffix)]
+                                    break
+                            if temp_lexema.lower().startswith('0x'): valor_final = int(temp_lexema, 16)
+                            elif temp_lexema.lower().startswith('0b'): valor_final = int(temp_lexema, 2)
+                            elif temp_lexema.startswith('0') and len(temp_lexema) > 1 and temp_lexema[1] in '01234567': valor_final = int(temp_lexema, 8)
+                            else: valor_final = int(temp_lexema)
                         except ValueError:
                             tipo_token_final = TT_ERROR_CPP
                             valor_final = f"Literal entero inválido: {lexema}"
-                    
                     elif tipo_token_base == TT_LITERAL_FLOTANTE:
                         try:
-                            valor_final = float(lexema.rstrip('fFlL')) # Quitar sufijos f/F/l/L antes de convertir
+                            valor_final = float(lexema.rstrip('fFlL')) 
                         except ValueError:
                             tipo_token_final = TT_ERROR_CPP
                             valor_final = f"Literal flotante inválido: {lexema}"
                     
-                    # Refinar tipos de operadores (esto es opcional, el parser puede hacerlo)
-                    elif tipo_token_base == TT_OPERADOR_ARITMETICO:
-                        if lexema in ['&&', '||', '!']: tipo_token_final = TT_OPERADOR_LOGICO
-                        elif lexema in ['&', '|', '^', '~']: tipo_token_final = TT_OPERADOR_BITWISE
-                        elif lexema in ['<', '>', '<=', '>=', '==', '!=']: tipo_token_final = TT_OPERADOR_COMPARACION
-                        elif lexema == '=' or lexema.endswith('='): # =, +=, -= etc.
-                             if lexema != '=' and not lexema in ['==', '!=', '<=', '>=']: # Evitar reclasificar ==, !=, <=, >=
-                                tipo_token_final = TT_OPERADOR_ASIGNACION
-                        elif lexema == '?': tipo_token_final = TT_OPERADOR_TERNARIO
-                        elif lexema == ':': tipo_token_final = TT_DOS_PUNTOS # Podría ser ternario o etiqueta/alcance
-
-                    elif tipo_token_base == TT_OPERADOR_MIEMBRO:
-                        if lexema == '::': tipo_token_final = TT_OPERADOR_MIEMBRO # Específicamente resolución de alcance
-                        # . y -> ya son TT_OPERADOR_MIEMBRO
+                    # El refinamiento de operadores basado en el lexema ya no es necesario aquí
+                    # si las regex en ESPECIFICACIONES_TOKEN_CPP están bien ordenadas y son específicas.
+                    # Por ejemplo, '<<' será TT_OPERADOR_BITWISE, '=' será TT_OPERADOR_ASIGNACION.
                     
                     tokens.append(Token(tipo_token_final, lexema, linea_inicio_token, col_inicio_token, valor_final))
                     self._avanzar(len(lexema))
                     break 
-            
             if not match_encontrado_en_iteracion and self.posicion_actual < len(self.codigo):
                 caracter_erroneo = self.codigo[self.posicion_actual]
                 tokens.append(Token(TT_ERROR_CPP, caracter_erroneo, linea_inicio_token, col_inicio_token,
                                     valor=f"Carácter no reconocido: '{caracter_erroneo}'"))
                 self._avanzar() 
-
         tokens.append(Token(TT_EOF_CPP, "EOF", self.linea_actual, self.columna_actual))
         return tokens
 

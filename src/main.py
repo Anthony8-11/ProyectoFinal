@@ -31,8 +31,12 @@ try:
     from analizador_lexico.lexer_javascript import LexerJavaScript, TT_ERROR_JS, TT_EOF_JS #JAVASCRIPT
     from analizador_sintactico.parser_javascript import ParserJavaScript #JAVASCRIPT
     from simulador_ejecucion.interprete_javascript import InterpreteJavaScript #JAVASCRIPT
-    # IMPORTACIÓN PARA LEXER C++ ---
+    # IMPORTACIÓN PARA C++ ---
     from analizador_lexico.lexer_cpp import LexerCPP, TT_ERROR_CPP, TT_EOF_CPP
+    from analizador_sintactico.parser_cpp import ParserCPP
+    from simulador_ejecucion.interprete_cpp import InterpreteCPP
+
+
 
 
 
@@ -312,35 +316,73 @@ def analizar_archivo_y_mostrar(ruta_archivo, nombre_archivo_simple):
                     import traceback; traceback.print_exc() # Para más detalles
             print("--- Fin Procesamiento JavaScript ---")
 
-        # --- BLOQUE PARA C++ ---
+        # --- NUEVO BLOQUE PARA C++ ---
         elif lenguaje_detectado == "C++":
             print("\n--- Análisis Léxico (C++) ---")
+            ast_generado_cpp = None
+            parser_cpp_instancia = None
+
             if not codigo_completo_str.strip():
                 print("El código C++ para el análisis léxico está vacío.")
             else:
                 try:
+                    # Fase Léxica para C++
                     lexer_cpp = LexerCPP(codigo_completo_str)
                     tokens_obtenidos_cpp = lexer_cpp.tokenizar()
                     
                     print(f"Total de tokens generados (C++): {len(tokens_obtenidos_cpp)}")
-                    tiene_errores_lexicos_cpp = False
-                    for i, token_obj in enumerate(tokens_obtenidos_cpp): # Imprimir tokens C++
-                        print(f"  {i+1:03d}: {token_obj}") 
-                        if token_obj.tipo == TT_ERROR_CPP:
-                            tiene_errores_lexicos_cpp = True
+                    tiene_errores_lexicos_cpp = any(t.tipo == TT_ERROR_CPP for t in tokens_obtenidos_cpp)
+                    
+                    # (Descomentar para imprimir tokens de C++)
+                    # for i, token_obj in enumerate(tokens_obtenidos_cpp): 
+                    #     print(f"  {i+1:03d}: {token_obj}") 
                     
                     if tiene_errores_lexicos_cpp:
                         print(">>> Se encontraron errores léxicos en el código C++. <<<")
                     elif tokens_obtenidos_cpp and tokens_obtenidos_cpp[-1].tipo == TT_EOF_CPP:
                         print(">>> Análisis léxico de C++ completado sin errores aparentes (finalizado con EOF). <<<")
                     else:
-                        print(">>> Problema con la salida del lexer de C++ (no finalizó con EOF o no generó tokens). <<<")
+                        print(">>> Problema con la salida del lexer de C++. <<<")
 
-                except Exception as e_lex_cpp:
-                    print(f"ERROR SEVERO durante el análisis léxico de C++: {e_lex_cpp}")
-                    import traceback
-                    traceback.print_exc()
-            print("--- Fin Análisis Léxico (C++) ---")
+                    # Fase Sintáctica para C++ (solo si la léxica fue exitosa)
+                    if not tiene_errores_lexicos_cpp and \
+                       tokens_obtenidos_cpp and \
+                       tokens_obtenidos_cpp[-1].tipo == TT_EOF_CPP:
+                        
+                        print("\n--- Análisis Sintáctico (C++) ---")
+                        try:
+                            parser_cpp_instancia = ParserCPP(tokens_obtenidos_cpp)
+                            ast_generado_cpp = parser_cpp_instancia.parse()
+                        except Exception as e_parse_cpp:
+                            print(f"ERROR CRÍTICO en la ejecución del Parser de C++: {e_parse_cpp}")
+                            # import traceback; traceback.print_exc() # Para más detalles
+                    else:
+                        print("\n--- Análisis Sintáctico (C++) ---")
+                        print("No se realizó el análisis sintáctico debido a errores léxicos o problemas con los tokens.")
+                    print("--- Fin Análisis Sintáctico (C++) ---")
+
+                    # Visualización del AST de C++ (si se generó)
+                    if ast_generado_cpp:
+                        print("\n--- Árbol de Sintaxis Abstracto (AST) Generado (C++) ---")
+                        #print(ast_generado_cpp) # Imprime usando los __repr__ de los nodos AST de C++
+                        print("--- Fin del AST (C++) ---")
+
+                        print("\n--- Simulación de Ejecución (C++) ---") 
+                        try:
+                            interprete_cpp = InterpreteCPP() 
+                            interprete_cpp.interpretar_unidad_traduccion(ast_generado_cpp)
+                        except Exception as e_interp_cpp:
+                            print(f"ERROR CRÍTICO durante la simulación de C++: {e_interp_cpp}")
+                            import traceback; traceback.print_exc() 
+
+                    elif not tiene_errores_lexicos_cpp and \
+                         (parser_cpp_instancia is None or (hasattr(parser_cpp_instancia, 'errores_sintacticos') and not parser_cpp_instancia.errores_sintacticos)):
+                        print("\nNo se generó un AST para C++, aunque no se reportaron errores explícitos (revisar lógica del parser).")
+
+                except Exception as e_proc_cpp:
+                    print(f"ERROR SEVERO durante el procesamiento de C++: {e_proc_cpp}")
+                    import traceback; traceback.print_exc() # Para más detalles
+            print("--- Fin Procesamiento C++ ---")
 
 #FIN
         else:
