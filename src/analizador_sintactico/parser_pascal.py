@@ -313,12 +313,11 @@ class ParserPascal:
         self.token_actual = self.tokens[self.posicion_actual] if self.tokens else None
         self.errores_sintacticos = []
         self.tabla_simbolos = TablaSimbolos()
-        print(f"[DEBUG Parser.__init__] id(self.tabla_simbolos) = {id(self.tabla_simbolos)}")
-        if self.tabla_simbolos.alcances: # Asegurarse que alcances existe y no está vacío
-            print(f"[DEBUG Parser.__init__] id(self.tabla_simbolos.alcances) = {id(self.tabla_simbolos.alcances)}")
-            print(f"[DEBUG Parser.__init__] id(self.tabla_simbolos.alcances[0]) = {id(self.tabla_simbolos.alcances[0])}")
-        else:
-            print("[DEBUG Parser.__init__] self.tabla_simbolos.alcances está vacío o no inicializado.")
+        # if self.tabla_simbolos.alcances: # Asegurarse que alcances existe y no está vacío
+        #     print(f"[DEBUG Parser.__init__] id(self.tabla_simbolos.alcances) = {id(self.tabla_simbolos.alcances)}")
+        #     print(f"[DEBUG Parser.__init__] id(self.tabla_simbolos.alcances[0]) = {id(self.tabla_simbolos.alcances[0])}")
+        # else:
+        #     print("[DEBUG Parser.__init__] self.tabla_simbolos.alcances está vacío o no inicializado.")
 
     def _avanzar(self):
         """Avanza al siguiente token en la lista."""
@@ -351,7 +350,6 @@ class ParserPascal:
                        f"Se esperaba {mensaje_esperado}.")
 
         self.errores_sintacticos.append(mensaje)
-        print(mensaje) # Imprimir para depuración inmediata
         raise SyntaxError(mensaje) # Detener el parsing en el primer error
 
     def _consumir(self, tipo_token_esperado, lexema_esperado=None, error_si_no_coincide=True):
@@ -397,23 +395,21 @@ class ParserPascal:
          
          # Si no hubo errores registrados y no se lanzó una excepción, el parsing fue exitoso.
          if not self.errores_sintacticos and ast_programa_nodo:
-              print("Análisis sintáctico y construcción de AST de Pascal completados exitosamente.")
+              pass
          
      except SyntaxError:
          # _error_sintactico lanza SyntaxError, que se captura aquí.
          # El error ya fue impreso por _error_sintactico.
-         print(f"Análisis sintáctico de Pascal detenido debido a errores.")
          ast_programa_nodo = None # Asegurar que no se devuelva un AST parcial en caso de error
      except Exception as e:
          # Captura cualquier otra excepción inesperada durante el parsing.
-         print(f"Error inesperado durante el parsing de Pascal: {e}")
          import traceback
          traceback.print_exc()
          ast_programa_nodo = None # No devolver AST en caso de error interno del parser
      
      # Registrar un resumen si hubo errores (aunque _error_sintactico ya los imprime).
      if self.errores_sintacticos and not ast_programa_nodo: # Si hubo errores y no se formó AST
-          print(f"Resumen: Parsing de Pascal falló con {len(self.errores_sintacticos)} error(es) sintáctico(s) detectado(s).")
+          pass
      
      return ast_programa_nodo # Devuelve el AST construido o None si falló.
 
@@ -476,27 +472,6 @@ class ParserPascal:
            self.token_actual.lexema.lower() == "var":
             declaraciones_var_nodo = self.parse_seccion_declaracion_var()
 
-        print(f"\n[DEBUG PARSER] ANTES de imprimir tabla: id(self.tabla_simbolos) = {id(self.tabla_simbolos)}")
-        print(f"[DEBUG PARSER] ANTES de imprimir tabla: id(self.tabla_simbolos.alcances) = {id(self.tabla_simbolos.alcances)}")
-        print(f"[DEBUG PARSER] ANTES de imprimir tabla: id(self.tabla_simbolos.alcances[0]) = {id(self.tabla_simbolos.alcances[0])}")
-        print("\n[DEBUG PARSER] Contenido de la Tabla de Símbolos (después de VAR):")
-
-        # --- INICIO DE IMPRESIÓN DE DEPURACIÓN ---
-        # Imprime el contenido de la tabla de símbolos después de procesar las declaraciones 'var'.
-        print("\n[DEBUG PARSER] Contenido de la Tabla de Símbolos (después de VAR):")
-        if hasattr(self.tabla_simbolos, 'alcances') and self.tabla_simbolos.alcances:
-            for i, alcance in enumerate(self.tabla_simbolos.alcances):
-                print(f"  Alcance {i}:")
-                if alcance: # Si el diccionario de alcance no está vacío
-                    for nombre_simbolo, detalles_simbolo in alcance.items():
-                        print(f"    '{nombre_simbolo}': {detalles_simbolo}")
-                else:
-                    print("      (vacío)")
-        else:
-            print("  La tabla de símbolos no tiene alcances o está vacía.")
-        print("[DEBUG PARSER] --------------------------------------------------\n")
-        # --- FIN DE IMPRESIÓN DE DEPURACIÓN ---
-            
         cuerpo_nodo = self.parse_cuerpo_programa() # O parse_bloque_compuesto si lo renombraste
         return NodoBloque(declaraciones_var_nodo, cuerpo_nodo)
 
@@ -545,18 +520,13 @@ class ParserPascal:
         # Gramática: declaracion_variable ::= lista_identificadores ":" tipo ";"
         # Este método construye un NodoDeclaracionVar y registra los símbolos en la tabla de símbolos.
         
-        print(f"[DEBUG Parser] Entrando a parse_declaracion_variable. Token actual: {self.token_actual}")
-        
         lista_id_tokens = self.parse_lista_identificadores() 
-        print(f"[DEBUG Parser] Después de parse_lista_identificadores. Token actual: {self.token_actual}")
         
         # Se consume el token ':' que separa los identificadores del tipo.
         self._consumir(TT_DOS_PUNTOS) 
-        print(f"[DEBUG Parser] Después de consumir TT_DOS_PUNTOS (':'). Token actual: {self.token_actual}") # Esta línea es crucial.
         
         # Se parsea el tipo de dato. Este método debe devolver un NodoTipo.
         tipo_nodo = self.parse_tipo() 
-        print(f"[DEBUG Parser] Después de parse_tipo. Token actual: {self.token_actual}, tipo_nodo devuelto: {tipo_nodo}")
         
         # Verificación de salvaguarda: si parse_tipo devolvió None y no hubo errores previos
         # (aunque parse_tipo debería lanzar un error si no puede parsear un tipo válido).
@@ -576,7 +546,6 @@ class ParserPascal:
             
             # Si no hay re-declaración, se agrega el símbolo a la tabla de símbolos.
             # Es importante que tipo_nodo sea un objeto NodoTipo válido aquí.
-            print(f"[DEBUG Parser] Intentando agregar a tabla: nombre='{nombre_variable}', tipo='{tipo_nodo.nombre_tipo if tipo_nodo else 'TIPO_NODO_ES_NONE'}'")
             self.tabla_simbolos.agregar_simbolo(
                 nombre=nombre_variable,
                 tipo_dato=tipo_nodo.nombre_tipo, # Se accede al atributo nombre_tipo del NodoTipo.
@@ -587,7 +556,6 @@ class ParserPascal:
 
         # Se consume el punto y coma final de la declaración de variable.
         self._consumir(TT_PUNTO_Y_COMA)
-        print(f"[DEBUG Parser] Saliendo de parse_declaracion_variable. Token actual: {self.token_actual}")
         
         # Se devuelve el nodo AST que representa esta declaración de variable.
         return NodoDeclaracionVar(lista_id_tokens, tipo_nodo)
@@ -800,7 +768,7 @@ class ParserPascal:
      # Por ahora, solo permitimos procedimientos conocidos o no verificamos en profundidad.
      # Si tuviéramos una forma de registrar procedimientos en la tabla de símbolos:
      # simbolo_proc = self.tabla_simbolos.buscar_simbolo(token_nombre_proc.lexema)
-     # if simbolo_proc is None or simbolo_proc.get('rol') != 'procedimiento':
+     # if simbolo_proc is None o simbolo_proc.get('rol') != 'procedimiento':
      #     self._error_sintactico(f"Error Semántico: Procedimiento '{token_nombre_proc.lexema}' no declarado.")
      
      argumentos_nodos = []
@@ -966,8 +934,7 @@ class ParserPascal:
             token_id_consumido = self._consumir(TT_IDENTIFICADOR)
             simbolo = self.tabla_simbolos.buscar_simbolo(token_id_consumido.lexema)
             if simbolo is None:
-                mensaje_error_sem = (f"Error Semántico: Identificador '{token_id_consumido.lexema}' no declarado "
-                                     f"(usado en L{token_id_consumido.linea}:C{token_id_consumido.columna}).")
+                mensaje_error_sem = f"Error Semántico: Identificador '{token_id_consumido.lexema}' no declarado (usado en L{token_id_consumido.linea}:C{token_id_consumido.columna})."
                 self.errores_sintacticos.append(mensaje_error_sem)
                 raise SyntaxError(mensaje_error_sem)
             return NodoIdentificador(token_id_consumido)
@@ -1146,19 +1113,16 @@ class ParserPascal:
             # Maneja el operador 'or', que tiene la precedencia más baja entre los lógicos.
             
             nodo = self.parse_termino_logico() # Parsea la primera parte (que puede incluir 'not' y 'and').
-            print(f"[DEBUG Parser.parse_expresion] Después de parse_termino_logico. Token actual: {self.token_actual}, Nodo izquierdo para OR: {nodo}")
 
 
             while self.token_actual and \
                 self.token_actual.tipo == TT_PALABRA_RESERVADA and \
                 self.token_actual.lexema.lower() == 'or':
-                print(f"[DEBUG Parser.parse_expresion] Entrando al bucle OR. Token actual: {self.token_actual}")
 
 
                 token_operador_or = self._consumir(TT_PALABRA_RESERVADA, 'or')
                 nodo_derecho = self.parse_termino_logico() # Parsea el siguiente operando.
                 nodo = NodoExpresionBinaria(token_operador_or, nodo, nodo_derecho)
-                print(f"[DEBUG Parser.parse_expresion] Después de procesar OR. Token actual: {self.token_actual}, Nuevo nodo: {nodo}")
 
                 
             return nodo

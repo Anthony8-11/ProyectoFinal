@@ -32,26 +32,26 @@ class TablaSimbolos:
 
     def agregar_simbolo(self, nombre, tipo_dato, rol, linea=None, columna=None, valor=None, info_extra=None):
         # Mensaje de depuración inicial
-        print(f"[DEBUG TS.agregar_simbolo] INICIO: nombre='{nombre}', tipo_dato='{tipo_dato}', rol='{rol}', linea={linea}")
+        # print(f"[DEBUG TS.agregar_simbolo] INICIO: nombre='{nombre}', tipo_dato='{tipo_dato}', rol='{rol}', linea={linea}")
 
         # Asegurar que self.alcances exista y tenga al menos un alcance (el global).
         # Esto es una salvaguarda; __init__ debería haber creado el alcance global.
         if not self.alcances:
-            print("[DEBUG TS.agregar_simbolo] 'self.alcances' estaba vacío. Creando alcance global [{}]).")
+            # print("[DEBUG TS.agregar_simbolo] 'self.alcances' estaba vacío. Creando alcance global [{}]).")
             self.alcances = [{}] # Inicializa o re-inicializa como una lista con un dict vacío.
             if not self.alcances: # No debería fallar, pero por si acaso.
-                print("[DEBUG TS.agregar_simbolo] CRÍTICO: No se pudo inicializar 'self.alcances'. No se puede agregar.")
+                # print("[DEBUG TS.agregar_simbolo] CRÍTICO: No se pudo inicializar 'self.alcances'. No se puede agregar.")
                 return False
         
         # Trabajar directamente con el primer diccionario en la lista self.alcances (alcance global).
         # Asumimos que para las declaraciones 'var' del programa principal, siempre es self.alcances[0].
         alcance_global_para_agregar = self.alcances[0] 
         
-        print(f"[DEBUG TS.agregar_simbolo] ID del objeto self.alcances[0]: {id(self.alcances[0])}")
-        print(f"[DEBUG TS.agregar_simbolo] Contenido de self.alcances[0] ANTES de verificar re-declaración: {alcance_global_para_agregar}")
+        # print(f"[DEBUG TS.agregar_simbolo] ID del objeto self.alcances[0]: {id(self.alcances[0])}")
+        # print(f"[DEBUG TS.agregar_simbolo] Contenido de self.alcances[0] ANTES de verificar re-declaración: {alcance_global_para_agregar}")
 
         if nombre in alcance_global_para_agregar: 
-            print(f"[DEBUG TS.agregar_simbolo] '{nombre}' YA EXISTE en self.alcances[0].")
+            # print(f"[DEBUG TS.agregar_simbolo] '{nombre}' YA EXISTE en self.alcances[0].")
             print(f"Error Semántico (TablaSimbolos): El símbolo '{nombre}' ya está declarado en el alcance global "
                   f"(declarado previamente en L{alcance_global_para_agregar.get(nombre, {}).get('linea', '?')}). "
                   f"No se puede re-declarar en L{linea}.")
@@ -72,9 +72,9 @@ class TablaSimbolos:
         # Modificación directa del diccionario en la lista self.alcances.
         self.alcances[0][nombre] = entrada_simbolo
         
-        print(f"[DEBUG TS.agregar_simbolo] Símbolo '{nombre}' AGREGADO a self.alcances[0].")
-        print(f"[DEBUG TS.agregar_simbolo] Contenido de self.alcances[0] DESPUÉS de agregar: {self.alcances[0]}")
-        print(f"[DEBUG TS.agregar_simbolo] Contenido COMPLETO de self.alcances DESPUÉS de agregar: {self.alcances}")
+        # print(f"[DEBUG TS.agregar_simbolo] Símbolo '{nombre}' AGREGADO a self.alcances[0].")
+        # print(f"[DEBUG TS.agregar_simbolo] Contenido de self.alcances[0] DESPUÉS de agregar: {self.alcances[0]}")
+        # print(f"[DEBUG TS.agregar_simbolo] Contenido COMPLETO de self.alcances DESPUÉS de agregar: {self.alcances}")
         return True
 
     def buscar_simbolo(self, nombre):

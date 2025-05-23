@@ -1,416 +1,270 @@
 # src/analizador_lexico/lexer_python.py
 import re
 
-# Podríamos definir una clase Token o usar diccionarios. Una clase es más estructurada.
+# Definición de la clase Token (reutilizada)
 class Token:
     def __init__(self, tipo, lexema, linea, columna, valor=None):
-        self.tipo = tipo          # Tipo de token (ej: IDENTIFICADOR, NUMERO_ENTERO)
-        self.lexema = lexema      # El texto actual del token (ej: "mi_variable", "123")
-        self.linea = linea        # Número de línea donde aparece el token
-        self.columna = columna    # Número de columna donde comienza el token
-        self.valor = valor if valor is not None else lexema # Valor real (ej: 123 para "123")
+        self.tipo = tipo
+        self.lexema = lexema
+        self.linea = linea
+        self.columna = columna
+        self.valor = valor if valor is not None else lexema
 
     def __repr__(self):
-        # Representación útil para depuración
-        return f"Token({self.tipo}, '{self.lexema}', L{self.linea}:C{self.columna}" + \
-               (f", V:{self.valor}" if self.valor != self.lexema else "") + ")"
+        lexema_display = self.lexema.replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')
+        valor_repr = repr(self.valor) if self.valor != self.lexema and self.valor is not None else ""
+        return (f"Token({self.tipo}, '{lexema_display}', "
+                f"L{self.linea}:C{self.columna}" +
+                (f", V:{valor_repr}" if valor_repr else "") + ")")
 
-# Definición de los tipos de token (los usaremos como constantes)
-# Palabras reservadas (se tratarán de forma especial)
-PALABRAS_RESERVADAS = {
-    'and', 'as', 'assert', 'async', 'await', 'break', 'class', 'continue', 'def',
-    'del', 'elif', 'else', 'except', 'False', 'finally', 'for', 'from',
-    'global', 'if', 'import', 'in', 'is', 'lambda', 'None', 'nonlocal',
-    'not', 'or', 'pass', 'raise', 'return', 'True', 'try', 'while', 'with', 'yield'
-    # 'print' no es palabra reservada en Python 3, es una función, pero la podemos tratar como tal si queremos
-}
-
-# Tipos de token que nuestro lexer reconocerá
+# Tipos de Token para Python
 TT_IDENTIFICADOR = 'IDENTIFICADOR'
-TT_PALABRA_RESERVADA = 'PALABRA_RESERVADA'
-
+TT_PALABRA_CLAVE = 'PALABRA_CLAVE' # Anteriormente PALABRA_RESERVADA
 TT_OPERADOR = 'OPERADOR'
 TT_DELIMITADOR = 'DELIMITADOR'
+TT_ENTERO = 'ENTERO'
+TT_FLOTANTE = 'FLOTANTE'
+TT_CADENA = 'CADENA'
+TT_COMENTARIO = 'COMENTARIO'
+TT_NUEVA_LINEA = 'NUEVA_LINEA'
+TT_INDENT = 'INDENT'
+TT_DEDENT = 'DEDENT'
+TT_EOF = 'EOF' # Fin de archivo
+TT_ERROR_LEXICO = 'ERROR_LEXICO' # Para errores
 
-TT_NUMERO_ENTERO = 'NUMERO_ENTERO'
-TT_NUMERO_FLOTANTE = 'NUMERO_FLOTANTE'
-TT_CADENA_LITERAL = 'CADENA_LITERAL'
+# Palabras clave de Python
+PALABRAS_CLAVE_PYTHON = {
+    'False', 'None', 'True', 'and', 'as', 'assert', 'async', 'await', 'break', 
+    'class', 'continue', 'def', 'del', 'elif', 'else', 'except', 'finally', 
+    'for', 'from', 'global', 'if', 'import', 'in', 'is', 'lambda', 'nonlocal', 
+    'not', 'or', 'pass', 'raise', 'return', 'try', 'while', 'with', 'yield'
+    # 'print' es una función en Python 3, no una palabra clave, 
+    # pero el parser puede necesitar tratarla especialmente.
+}
+# Literales que son palabras clave
+LITERALES_PALABRA_CLAVE_PYTHON = {
+    'True': TT_PALABRA_CLAVE, # O un tipo TT_BOOLEANO si se prefiere
+    'False': TT_PALABRA_CLAVE,
+    'None': TT_PALABRA_CLAVE  # O un tipo TT_NONE si se prefiere
+}
 
-TT_COMENTARIO = 'COMENTARIO' # Generalmente se ignoran o se manejan de forma especial
 
-TT_NUEVA_LINEA = 'NUEVA_LINEA' # Token para los saltos de línea explícitos
-TT_INDENT = 'INDENT'           # Token para aumento de indentación
-TT_DEDENT = 'DEDENT'           # Token para disminución de indentación
+# Especificaciones de tokens para Python
+# El orden es importante, especialmente para operadores de múltiples caracteres.
+ESPECIFICACIONES_TOKEN_PYTHON = [
+    # Comentarios (se deben ignorar o manejar por separado)
+    (r'#[^\n\r]*', TT_COMENTARIO),
 
-TT_EOF = 'EOF'                 # Fin de archivo/entrada
-TT_ERROR_LEXICO = 'ERROR_LEXICO' # Token para errores
-TT_ESPACIO = 'ESPACIO'         # Para espacios que no son indentación (usualmente se ignoran)
+    # Nueva línea (muy importante para Python)
+    (r'\n', TT_NUEVA_LINEA),
 
+    # F-strings (antes de strings normales e identificadores)
+    # Se capturan como TT_CADENA. La interpolación se manejaría en una fase posterior (intérprete).
+    (r'f"(?:\\.|[^"\\])*?"', TT_CADENA),  # f"..."
+    (r"f'(?:\\.|[^'\\])*?'", TT_CADENA),  # f'...'
+    (r'rf"(?:\\.|[^"\\])*?"', TT_CADENA), # rf"..."
+    (r"rf'(?:\\.|[^'\\])*?'", TT_CADENA), # rf'...'
+    (r'fr"(?:\\.|[^"\\])*?"', TT_CADENA), # fr"..."
+    (r"fr'(?:\\.|[^'\\])*?'", TT_CADENA), # fr'...'
+    # Strings normales
+    (r'r"(?:\\.|[^"\\])*?"', TT_CADENA),  # r"..."
+    (r"r'(?:\\.|[^'\\])*?'", TT_CADENA),  # r'...'
+    (r'"""(?:\\.|[^"\\])*?"""', TT_CADENA),  
+    (r"'''(?:\\.|[^'\\])*?'''", TT_CADENA),  
+    (r'"(?:\\.|[^"\\])*?"', TT_CADENA),    
+    (r"'(?:\\.|[^'\\])*?'", TT_CADENA),
+    # Palabras clave e Identificadores
+    # (El manejo de si es palabra clave o identificador se hará después)
+    (r'[a-zA-Z_][a-zA-Z0-9_]*', TT_IDENTIFICADOR),
 
+    # Números (manejar flotantes antes que enteros si un entero puede ser prefijo de flotante)
+    (r'\d+\.\d*(?:[eE][+-]?\d+)?', TT_FLOTANTE), # 3.14, 3. (con e/E para exponente)
+    (r'\.\d+(?:[eE][+-]?\d+)?', TT_FLOTANTE),   # .5
+    (r'\d+[eE][+-]?\d+', TT_FLOTANTE),        # 3e4
+    (r'\d+', TT_ENTERO),                     # 123
 
-
-# Especificaciones de los tokens: (expresión_regular, TIPO_TOKEN)
-# El orden es importante.
-ESPECIFICACIONES_TOKEN = [
-    # Comentarios (deben ir primero para ser descartados o manejados)
-    (r'#[^\n]*',                 TT_COMENTARIO),       # Comentario de una línea
-
-    # Nueva línea (importante para la estructura de Python y la indentación)
-    (r'\n',                      TT_NUEVA_LINEA),
-
-    # Espacios y tabs (que no son indentación al inicio de línea)
-    # Los capturamos para poder ignorarlos explícitamente si no son indentación.
-    # La indentación se manejará de forma separada y más compleja.
-    (r'[ \t]+',                  TT_ESPACIO),
-
-    # Literales de cadena (manejar diferentes tipos de comillas y multilínea)
-    # Nota: Estos regex son simplificados y podrían no cubrir todos los casos de escape.
-    (r'"""([\s\S]*?)"""',        TT_CADENA_LITERAL),  # Docstring/cadena multilínea con comillas dobles
-    (r"'''([\s\S]*?)'''",        TT_CADENA_LITERAL),  # Docstring/cadena multilínea con comillas simples
-    (r'"([^"\\]*(\\.[^"\\]*)*)"', TT_CADENA_LITERAL),  # Cadena con comillas dobles (maneja escapes simples)
-    (r"'([^'\\]*(\\.[^'\\]*)*)'", TT_CADENA_LITERAL),  # Cadena con comillas simples (maneja escapes simples)
-    # Podríamos añadir f-strings, raw strings (r""), byte strings (b"") si quisiéramos expandir.
-
-    # Palabras reservadas y Identificadores
-    # El regex para IDENTIFICADOR es más general.
-    # Una forma común es capturar como IDENTIFICADOR y luego verificar si está en PALABRAS_RESERVADAS.
-    (r'[a-zA-Z_]\w*',            TT_IDENTIFICADOR),   # Identificadores (incluye palabras reservadas inicialmente)
-
-    # Números (flotantes antes que enteros para evitar coincidencias parciales)
-    # Este regex para flotantes es básico, Python soporta notación científica, etc.
-    (r'\d+\.\d*([eE][-+]?\d+)?',  TT_NUMERO_FLOTANTE), # Ej: 3.14, 3., 0.5, 1e-5
-    (r'\.\d+([eE][-+]?\d+)?',    TT_NUMERO_FLOTANTE), # Ej: .5
-    (r'\d+([eE][-+]?\d+)',       TT_NUMERO_FLOTANTE), # Ej: 1e5 (entero con exponente es flotante)
-    (r'\d+',                     TT_NUMERO_ENTERO),   # Ej: 123, 0
-
-    # Operadores (los más largos primero para evitar coincidencias parciales)
-    (r'\/\/',                    TT_OPERADOR),        # División entera
-    (r'\*\*',                    TT_OPERADOR),        # Potencia
-    (r'==|!=|<=|>=',             TT_OPERADOR),        # Comparación
-    (r'\+=|-=|\*=|/=|//=|%=|\*\*=', TT_OPERADOR),    # Asignación compuesta
-    (r'[+\-*/%<>&|^~=]',         TT_OPERADOR),        # Operadores de un solo carácter
+    # Operadores
+    (r'\+=|-=|\*=|/=|%=|&=|\|=|\^=|>>=|<<=|\*\*=|//=', TT_OPERADOR), # Asignación compuesta
+    (r'\*\*|//', TT_OPERADOR), # Exponenciación, división entera
+    (r'==|!=|<=|>=|<>', TT_OPERADOR), # Comparación
+    (r'\+|-|\*|/|%|&|\||\^|~|<<|>>', TT_OPERADOR), # Aritméticos/Bitwise
+    (r'<|>', TT_OPERADOR), # Comparación
+    (r'=', TT_OPERADOR),  # Asignación simple
 
     # Delimitadores
-    (r'[\(\)\[\]\{\}:,\.]',      TT_DELIMITADOR),
+    (r'\(|\)|\[|\]|\{|\}|:|@|\.|,', TT_DELIMITADOR), # Se quitó ;
+    
+    # Espacios en blanco (generalmente ignorados, excepto para indentación)
+    # La indentación se maneja por separado. Esta regla es para espacios dentro de una línea.
+    (r'[ \t]+', None), # Ignorar espacios y tabs que no sean indentación al inicio de línea
 ]
 
-# Combinar todas las expresiones regulares en una sola gran expresión regular
-# usando grupos nombrados (?P<TOKEN_TYPE>...) para identificar qué regla coincidió.
-# Esto es una alternativa a iterar sobre ESPECIFICACIONES_TOKEN para cada match.
-# Por ahora, seguiremos con la iteración simple sobre ESPECIFICACIONES_TOKEN.
-# La lógica de indentación se manejará por separado porque no encaja bien
-# en este esquema de regex simple por token.
-
-
-# (Continuación, después de ESPECIFICACIONES_TOKEN)
 
 class LexerPython:
     def __init__(self, codigo_fuente):
-        self.codigo = codigo_fuente
-        self.posicion_actual = 0   # Posición actual en self.codigo
-        self.linea_actual = 1      # Número de línea actual (comienza en 1)
-        self.columna_actual = 1    # Columna actual en la línea (comienza en 1)
-        
-        # Para el manejo de la indentación
-        self.pila_indentacion = [0] # Pila para rastrear los niveles de indentación. Empieza con 0.
-        self.esperando_indentacion_linea = True # True si estamos al inicio de una línea esperando espacios/tabs.
+        self.codigo = codigo_fuente.replace('\r\n', '\n').replace('\r', '\n') 
+        self.tokens_generados = []
+        # self.posicion_actual = 0 # No se usa directamente en el enfoque línea por línea
+        self.linea_actual = 1      # Usado para el token EOF y potencialmente por _avanzar
+        self.columna_actual = 1    # Usado para el token EOF y potencialmente por _avanzar
+        self.pila_indentacion = [0] 
+        self.regex_compilado = []
+        for patron, tipo in ESPECIFICACIONES_TOKEN_PYTHON:
+            self.regex_compilado.append((re.compile(patron), tipo))
 
-    def _avanzar(self, cantidad=1):
-        """Avanza la posición actual en el código y actualiza línea/columna."""
+    def _avanzar(self, cantidad=1): # Este método existe pero no es llamado por el tokenizador actual
         for _ in range(cantidad):
-            if self.posicion_actual < len(self.codigo):
-                caracter = self.codigo[self.posicion_actual]
-                if caracter == '\n':
+            if self.posicion_actual < len(self.codigo): # Necesitaría self.posicion_actual si se usara
+                if self.codigo[self.posicion_actual] == '\n':
                     self.linea_actual += 1
                     self.columna_actual = 1
-                    self.esperando_indentacion_linea = True # Después de una nueva línea, esperamos indentación
                 else:
                     self.columna_actual += 1
                 self.posicion_actual += 1
             else:
-                # Ya no hay más caracteres para avanzar
                 break 
 
-    def _caracter_actual(self):
-        """Devuelve el carácter en la posición actual o None si es EOF."""
-        if self.posicion_actual < len(self.codigo):
-            return self.codigo[self.posicion_actual]
-        return None
+    def _procesar_identificador_o_palabra_clave(self, lexema, linea, col):
+        if lexema in PALABRAS_CLAVE_PYTHON:
+            if lexema in LITERALES_PALABRA_CLAVE_PYTHON:
+                valor_real = None
+                if lexema == 'True': valor_real = True
+                elif lexema == 'False': valor_real = False
+                return Token(TT_PALABRA_CLAVE, lexema, linea, col, valor_real) 
+            return Token(TT_PALABRA_CLAVE, lexema, linea, col)
+        return Token(TT_IDENTIFICADOR, lexema, linea, col)
 
-    def _peek(self, cantidad=1):
-        """Devuelve el siguiente carácter (o N caracteres) sin avanzar la posición."""
-        peek_pos = self.posicion_actual + cantidad -1
-        if peek_pos < len(self.codigo):
-            return self.codigo[self.posicion_actual : self.posicion_actual + cantidad]
-        return None
-
-    # Los métodos para tokenizar, manejar indentación, etc., vendrán aquí.
-
-
-
-    def _manejar_indentacion(self):
-        """
-        Compara la indentación actual con la pila de indentación y genera
-        tokens INDENT o DEDENT según sea necesario.
-        Este método se llama al inicio de una nueva línea (después de procesar \n
-        y antes de cualquier otro token en esa línea, excepto espacios de indentación).
-        """
-        tokens_indentacion = []
-        if not self.esperando_indentacion_linea:
-            return tokens_indentacion # No estamos al inicio de una línea para verificar indentación
-
-        # Contar los espacios/tabs de la indentación actual
-        indentacion_actual_str = ""
-        pos_temp = self.posicion_actual
-        while pos_temp < len(self.codigo) and self.codigo[pos_temp] in ' \t':
-            indentacion_actual_str += self.codigo[pos_temp]
-            pos_temp += 1
+    def _manejar_indentacion(self, linea_str, linea_num, columna_inicio_linea):
+        espacios_inicio = 0
+        linea_contenido_real = linea_str.lstrip() # Para ignorar espacios al inicio para la lógica de "vacía"
         
-        # Asumimos que los tabs se expanden a un múltiplo de 8 espacios,
-        # o una política de tabs consistente (ej. 4 espacios).
-        # Por simplicidad, contaremos tabs como 1 y espacios como 1,
-        # pero una implementación real debería ser más robusta o forzar una política.
-        # Aquí vamos a usar una conversión simple: 1 tab = 4 espacios (configurable)
-        espacios_por_tab = 4 
-        nivel_indentacion_actual = 0
-        for char_indent in indentacion_actual_str:
-            if char_indent == ' ':
-                nivel_indentacion_actual += 1
-            elif char_indent == '\t':
-                # Ajustar al siguiente múltiplo de espacios_por_tab
-                # nivel_indentacion_actual = (nivel_indentacion_actual // espacios_por_tab + 1) * espacios_por_tab
-                # O más simple, pero menos preciso si se mezclan tabs y espacios de forma inconsistente:
-                nivel_indentacion_actual += espacios_por_tab 
-        
-        # Solo procesar indentación si la línea no está vacía después de la indentación
-        # o si es el final del archivo (para cerrar bloques abiertos).
-        siguiente_caracter_no_espacio = None
-        if pos_temp < len(self.codigo):
-            siguiente_caracter_no_espacio = self.codigo[pos_temp]
+        # Solo procesar indentación para líneas que no están vacías y no son comentarios completos
+        if not linea_contenido_real or linea_contenido_real.startswith('#'):
+            return
 
-        # No generar tokens de indentación para líneas completamente vacías o solo comentarios
-        # a menos que sea para cerrar bloques al final del archivo.
-        if siguiente_caracter_no_espacio == '\n' or (siguiente_caracter_no_espacio == '#' and self.posicion_actual == pos_temp - len(indentacion_actual_str)):
-             # Si la línea está vacía o es un comentario de línea completa, no cambiamos el nivel de indentación actual
-             # y consumimos los espacios de indentación.
-            if indentacion_actual_str:
-                self._avanzar(len(indentacion_actual_str)) # Consumir los espacios de indentación
-            self.esperando_indentacion_linea = False # Ya no esperamos indentación en esta línea
-            return tokens_indentacion
-
-
-        # Comparamos con el último nivel de indentación en la pila
-        if nivel_indentacion_actual > self.pila_indentacion[-1]:
-            self.pila_indentacion.append(nivel_indentacion_actual)
-            tokens_indentacion.append(Token(TT_INDENT, indentacion_actual_str, self.linea_actual, 1)) # Columna de indent es 1
-            self._avanzar(len(indentacion_actual_str)) # Consumir los espacios/tabs de indentación
-        elif nivel_indentacion_actual < self.pila_indentacion[-1]:
-            while nivel_indentacion_actual < self.pila_indentacion[-1]:
-                self.pila_indentacion.pop()
-                # El lexema para DEDENT es conceptual, no hay un texto específico.
-                # Usamos una cadena vacía o un marcador.
-                tokens_indentacion.append(Token(TT_DEDENT, "<DEDENT>", self.linea_actual, 1)) 
-                if nivel_indentacion_actual > self.pila_indentacion[-1]:
-                    # Error: Nivel de indentación inconsistente (des-indentado a un nivel no previo)
-                    # Este error es más bien sintáctico, pero el lexer puede detectarlo.
-                    # Por ahora, lo reportamos aquí.
-                    tokens_indentacion.append(Token(TT_ERROR_LEXICO, 
-                                                    f"Error de des-indentación: nivel inconsistente. Esperaba {self.pila_indentacion[-1]} o menos.",
-                                                    self.linea_actual, 1))
-                    break # Salir del while para evitar bucles si hay error grave
-            # No consumimos caracteres aquí, ya que el DEDENT es implícito.
-            # La indentación actual (menor) ya fue leída para calcular nivel_indentacion_actual.
-            # Nos aseguramos de que la posición actual refleje los espacios leídos.
-            self._avanzar(len(indentacion_actual_str))
-        else: # nivel_indentacion_actual == self.pila_indentacion[-1]
-            # Misma indentación, no hacer nada, solo consumir los espacios.
-            if indentacion_actual_str:
-                 self._avanzar(len(indentacion_actual_str))
-
-        self.esperando_indentacion_linea = False # Ya no esperamos indentación en esta línea (después de procesarla)
-        return tokens_indentacion
-
-
-    def _omitir_espacios_y_comentarios_inline(self):
-        """Omite espacios en blanco (que no son indentación) y comentarios."""
-        while self.posicion_actual < len(self.codigo):
-            if self.codigo[self.posicion_actual] in ' \t': # Espacios que no son indentación
-                self._avanzar()
-            elif self.codigo[self.posicion_actual] == '#': # Comentario de línea
-                # Avanzar hasta el final de la línea o del archivo
-                while self.posicion_actual < len(self.codigo) and self.codigo[self.posicion_actual] != '\n':
-                    self._avanzar()
-                # No consumimos la NUEVA_LINEA aquí, se hará como un token separado
+        for char_idx, char in enumerate(linea_str):
+            if char == ' ':
+                espacios_inicio += 1
+            elif char == '\t':
+                # Un tab se expande a la siguiente columna múltiplo de 8.
+                # Columna es 1-based.
+                espacios_inicio = (espacios_inicio // 8 + 1) * 8 
             else:
-                break # Encontramos algo que no es espacio ni comentario inline
-
-    def obtener_siguiente_token(self):
-        """
-        Obtiene el siguiente token del código fuente.
-        Maneja la indentación y omite espacios y comentarios.
-        """
-        # Primero, si estamos al inicio de una línea, manejar la indentación
-        if self.esperando_indentacion_linea:
-            tokens_indent_dedent = self._manejar_indentacion()
-            if tokens_indent_dedent: # Si se generaron tokens INDENT/DEDENT, devolver el primero
-                # Guardar los restantes para las próximas llamadas si se generaron varios (ej. múltiples DEDENT)
-                # Esto requeriría una cola interna de tokens pendientes.
-                # Por ahora, simplificamos: _manejar_indentacion devuelve una lista,
-                # y si hay algo, esta función debería devolverlos uno por uno.
-                # Para una primera implementación, asumimos que _manejar_indentacion devuelve 0 o 1 token
-                # o que el llamador maneja la lista.
-                # --- Refactorización necesaria aquí para manejar múltiples tokens de indent/dedent ---
-                # Por ahora, si hay, devolvemos el primero y el resto se perdería.
-                # Solución simple: tener una lista de "tokens_buffer" en el lexer.
-                # Si self.tokens_buffer no está vacío, pop y return.
-                # Sino, calcular el siguiente.
-                # _manejar_indentacion llenaría self.tokens_buffer.
-                # Para este ejemplo, vamos a simplificar y asumir que devuelve máximo un token relevante a la vez
-                # o que el llamador procesará la lista. Por ahora, devolveremos el primero de la lista si existe.
-                # Este es un punto a mejorar.
-                # Una forma simple: Si _manejar_indentacion devuelve una lista, la retornamos y el tokenizer principal
-                # la procesa.
-                if tokens_indent_dedent:
-                    return tokens_indent_dedent # Devolvemos la lista de tokens de indent/dedent
+                break # Fin del whitespace inicial
         
-        # Omitir espacios en blanco (que no son indentación) y comentarios inline
-        # después de manejar la indentación.
-        if not self.esperando_indentacion_linea: # Solo si no estamos esperando indentación (ya se procesó o no aplica)
-             self._omitir_espacios_y_comentarios_inline()
+        nivel_actual_indentacion = espacios_inicio
 
-
-        # Comprobar si hemos llegado al final del código
-        if self.posicion_actual >= len(self.codigo):
-            # Antes de EOF, asegurarse de cerrar todos los bloques de indentación abiertos
-            tokens_finales_dedent = []
-            if len(self.pila_indentacion) > 1: # Hay niveles de indentación abiertos (más que el global 0)
-                linea_eof = self.linea_actual
-                col_eof = self.columna_actual
-                while len(self.pila_indentacion) > 1:
-                    self.pila_indentacion.pop()
-                    tokens_finales_dedent.append(Token(TT_DEDENT, "<DEDENT_EOF>", linea_eof, col_eof))
-                if tokens_finales_dedent:
-                    # Similar al problema anterior: cómo devolver múltiples tokens.
-                    # Devolveremos la lista para que el método principal la maneje.
-                    return tokens_finales_dedent
-            return [Token(TT_EOF, "EOF", self.linea_actual, self.columna_actual)] # Devolver como lista
-
-
-        # Intentar hacer coincidir las especificaciones de token con el código restante
-        codigo_restante = self.codigo[self.posicion_actual:]
-        
-        for patron_regex, tipo_token in ESPECIFICACIONES_TOKEN:
-            match = re.match(patron_regex, codigo_restante)
-            if match:
-                lexema = match.group(0) # El texto completo que coincidió
-                
-                # Guardar posición antes de avanzar para la creación del token
-                linea_inicio_token = self.linea_actual
-                columna_inicio_token = self.columna_actual
-
-                self._avanzar(len(lexema)) # Avanzar la posición en el código fuente
-
-                # Si es un identificador, verificar si es una palabra reservada
-                if tipo_token == TT_IDENTIFICADOR and lexema in PALABRAS_RESERVADAS:
-                    return [Token(TT_PALABRA_RESERVADA, lexema, linea_inicio_token, columna_inicio_token)]
-
-                # Si es un espacio o comentario, y no los estamos guardando, podríamos querer omitirlos
-                # y llamar recursivamente a obtener_siguiente_token.
-                # Pero ya los manejamos en _omitir_espacios_y_comentarios_inline y
-                # la indentación en _manejar_indentacion.
-                # Los tokens TT_ESPACIO y TT_COMENTARIO se generan aquí si no se filtraron antes.
-                # Generalmente, un lexer los omite a menos que una fase posterior los necesite.
-                if tipo_token == TT_ESPACIO or tipo_token == TT_COMENTARIO:
-                    # Omitir y obtener el siguiente (esto puede hacerse en el bucle principal de tokenización)
-                    # Por ahora, los generaremos y el bucle principal de tokenización los ignorará.
-                    # return self.obtener_siguiente_token() # Recursión para omitir (cuidado con bucles infinitos)
-                    # Mejor: el bucle principal que llama a esto los filtrará.
-                     return [Token(tipo_token, lexema, linea_inicio_token, columna_inicio_token)]
-
-
-                # Para números, convertir el lexema a su valor numérico
-                valor = lexema
-                if tipo_token == TT_NUMERO_ENTERO:
-                    valor = int(lexema)
-                elif tipo_token == TT_NUMERO_FLOTANTE:
-                    valor = float(lexema)
-                elif tipo_token == TT_CADENA_LITERAL:
-                    # Quitar las comillas del inicio y final para el valor, y procesar escapes si es necesario
-                    # Esto es una simplificación, el manejo de escapes es más complejo.
-                    if lexema.startswith('"""') or lexema.startswith("'''"):
-                        valor = lexema[3:-3]
-                    else:
-                        valor = lexema[1:-1] 
-                    # Aquí se podrían procesar secuencias de escape comunes como \n, \t, \\, \', \"
-                    valor = valor.encode('utf-8').decode('unicode_escape') # Intento básico de manejar escapes
-
-                return [Token(tipo_token, lexema, linea_inicio_token, columna_inicio_token, valor)]
-        
-        # Si ninguna especificación coincide, es un error léxico
-        caracter_error = self.codigo[self.posicion_actual]
-        linea_error = self.linea_actual
-        columna_error = self.columna_actual
-        self._avanzar() # Avanzar para no quedarse atascado en el error
-        return [Token(TT_ERROR_LEXICO, caracter_error, linea_error, columna_error, 
-                     valor=f"Carácter no reconocido: '{caracter_error}'")]
-    
-
+        if nivel_actual_indentacion > self.pila_indentacion[-1]:
+            self.pila_indentacion.append(nivel_actual_indentacion)
+            self.tokens_generados.append(Token(TT_INDENT, "<INDENT>", linea_num, columna_inicio_linea))
+        elif nivel_actual_indentacion < self.pila_indentacion[-1]:
+            while nivel_actual_indentacion < self.pila_indentacion[-1]:
+                self.pila_indentacion.pop()
+                self.tokens_generados.append(Token(TT_DEDENT, "<DEDENT>", linea_num, columna_inicio_linea))
+            if nivel_actual_indentacion != self.pila_indentacion[-1]:
+                # Error de indentación: nivel no coincide con ninguno anterior
+                # El lexema del error podría ser la línea entera o la parte indentada.
+                # Usamos la línea desde la indentación para el lexema del error.
+                lexema_error = linea_str[espacios_inicio:] if espacios_inicio < len(linea_str) else "<FIN_LINEA_INDENT_ERR>"
+                self.tokens_generados.append(Token(TT_ERROR_LEXICO, lexema_error, linea_num, columna_inicio_linea + espacios_inicio, "Error de indentación inconsistente"))
 
 
     def tokenizar(self):
-        """
-        Procesa todo el código fuente y devuelve una lista de tokens.
-        Omite tokens de espacio y comentarios.
-        """
-        tokens_resultantes = []
-        # Buffer para tokens generados por _manejar_indentacion o al final del archivo (múltiples DEDENTs)
-        buffer_tokens_pendientes = []
+        lineas = self.codigo.split('\n')
+        
+        for num_linea_enum, linea_str_original in enumerate(lineas):
+            linea_num_real = num_linea_enum + 1
+            columna_actual_en_linea = 1 # Columna es 1-based
+            
+            # Manejar indentación al inicio de cada línea física
+            self._manejar_indentacion(linea_str_original, linea_num_real, 1) # Columna 1 para INDENT/DEDENT
 
-        while True:
-            nuevos_tokens = []
-            if buffer_tokens_pendientes:
-                # Si hay tokens en el buffer (de múltiples DEDENTs por ejemplo), procesarlos primero.
-                # Aquí tomamos uno a la vez del buffer para simplificar el bucle principal,
-                # pero también podríamos extender tokens_resultantes con todo el buffer.
-                token_actual = buffer_tokens_pendientes.pop(0) # Tomar el primero de la lista
-                nuevos_tokens.append(token_actual) 
-            else:
-                # Si el buffer está vacío, obtener el siguiente token (o lista de tokens) del código.
-                nuevos_tokens_generados = self.obtener_siguiente_token()
+            pos_en_linea = 0
+            # Saltar espacios iniciales que ya fueron contados por _manejar_indentacion
+            while pos_en_linea < len(linea_str_original) and linea_str_original[pos_en_linea].isspace():
+                pos_en_linea += 1
+            
+            linea_tuvo_tokens_significativos = False
+
+            while pos_en_linea < len(linea_str_original):
+                col_actual_real = pos_en_linea + 1
+                match_encontrado_en_iteracion = False
+                subcadena_linea = linea_str_original[pos_en_linea:]
+
+                for regex, tipo_token_base in self.regex_compilado:
+                    if tipo_token_base == TT_NUEVA_LINEA: continue # Los TT_NUEVA_LINEA se manejan al final de la línea
+
+                    match = regex.match(subcadena_linea)
+                    if match:
+                        lexema = match.group(0)
+                        match_encontrado_en_iteracion = True
+                        
+                        if tipo_token_base is None: # Ignorar (ej. espacios dentro de la línea)
+                            pos_en_linea += len(lexema)
+                            break 
+                        
+                        if tipo_token_base == TT_COMENTARIO:
+                            pos_en_linea += len(lexema) 
+                            # El comentario consume el resto de la línea, así que salimos del bucle interno
+                            match_encontrado_en_iteracion = True # Asegura que no se marque error
+                            break # Salir del bucle de regex, ir a la siguiente línea
+
+                        token_final = None
+                        if tipo_token_base == TT_IDENTIFICADOR:
+                            token_final = self._procesar_identificador_o_palabra_clave(lexema, linea_num_real, col_actual_real)
+                        elif tipo_token_base == TT_CADENA:
+                            valor_cadena = lexema 
+                            prefijo_f = ""
+                            if lexema.lower().startswith(('f"', "f'", 'rf"', "rf'", 'fr"', "fr'")):
+                                prefijo_f = lexema[0].lower()
+                                if lexema.lower().startswith(('rf', 'fr')): valor_cadena = lexema[3:-1]
+                                else: valor_cadena = lexema[2:-1] 
+                            elif lexema.startswith(('"""', "'''")): valor_cadena = lexema[3:-3]
+                            else: valor_cadena = lexema[1:-1]
+                            valor_cadena = valor_cadena.replace('\\n', '\n').replace('\\t', '\t').replace("\\'", "'").replace('\\"', '"').replace('\\\\', '\\')
+                            # Para f-strings, el valor es la cadena interna. La 'f' es parte del lexema.
+                            token_final = Token(TT_CADENA, lexema, linea_num_real, col_actual_real, valor_cadena)
+                        elif tipo_token_base == TT_ENTERO:
+                            token_final = Token(TT_ENTERO, lexema, linea_num_real, col_actual_real, int(lexema))
+                        elif tipo_token_base == TT_FLOTANTE:
+                            token_final = Token(TT_FLOTANTE, lexema, linea_num_real, col_actual_real, float(lexema))
+                        else: 
+                            token_final = Token(tipo_token_base, lexema, linea_num_real, col_actual_real)
+                        
+                        if token_final:
+                            self.tokens_generados.append(token_final)
+                            linea_tuvo_tokens_significativos = True
+
+                        pos_en_linea += len(lexema)
+                        break 
                 
-                if nuevos_tokens_generados: # puede ser una lista
-                    buffer_tokens_pendientes.extend(nuevos_tokens_generados) # Añadir todos a la cola
-                    if buffer_tokens_pendientes: # Si se añadieron, tomar el primero para procesar
-                        token_actual = buffer_tokens_pendientes.pop(0)
-                        nuevos_tokens.append(token_actual)
-                    else: # No debería pasar si nuevos_tokens_generados no estaba vacío
-                        continue 
-                else: # No se generaron nuevos tokens (raro, debería haber al menos EOF)
-                    break
+                if not match_encontrado_en_iteracion:
+                    if pos_en_linea < len(linea_str_original): 
+                        caracter_erroneo = linea_str_original[pos_en_linea]
+                        self.tokens_generados.append(Token(TT_ERROR_LEXICO, caracter_erroneo, linea_num_real, col_actual_real,
+                                                    valor=f"Carácter no reconocido: '{caracter_erroneo}'"))
+                        pos_en_linea += 1 
+                        linea_tuvo_tokens_significativos = True # Un error también es significativo
+            
+            # Añadir TT_NUEVA_LINEA después de procesar cada línea física,
+            # si la línea no estaba vacía (después de quitar espacios iniciales y comentarios)
+            # o si la última cosa que se añadió no fue un DEDENT (porque DEDENT ya implica fin de bloque).
+            if linea_str_original.strip() and not linea_str_original.lstrip().startswith('#'):
+                 self.tokens_generados.append(Token(TT_NUEVA_LINEA, "\\n", linea_num_real, len(linea_str_original) + 1))
+            elif not linea_str_original.strip() and self.tokens_generados and self.tokens_generados[-1].tipo == TT_DEDENT:
+                 # Si la línea está vacía pero acabamos de hacer DEDENT, aún necesitamos un NUEVA_LINEA
+                 # para separar el DEDENT de la siguiente línea de código.
+                 self.tokens_generados.append(Token(TT_NUEVA_LINEA, "\\n", linea_num_real, 1))
 
 
-            # Procesar el token_actual obtenido (que está en nuevos_tokens[0])
-            if nuevos_tokens:
-                token_para_procesar = nuevos_tokens[0]
+        # Al final del archivo, generar los DEDENTs necesarios y un NUEVA_LINEA final si es necesario
+        if self.tokens_generados and self.tokens_generados[-1].tipo != TT_NUEVA_LINEA:
+             self.tokens_generados.append(Token(TT_NUEVA_LINEA, "\\n", self.linea_actual, self.columna_actual))
 
-                # Ignorar espacios y comentarios, a menos que se decida lo contrario
-                if token_para_procesar.tipo in [TT_ESPACIO, TT_COMENTARIO]:
-                    if not buffer_tokens_pendientes and token_para_procesar.tipo == TT_EOF: # Asegurarse de no perder el EOF si es el único en el buffer
-                         tokens_resultantes.append(token_para_procesar)
-                         break # Salir del bucle while si es EOF
-                    continue # Saltar al siguiente ciclo del while para obtener más tokens
+        while len(self.pila_indentacion) > 1:
+            self.pila_indentacion.pop()
+            self.tokens_generados.append(Token(TT_DEDENT, "<DEDENT>", self.linea_actual, 1)) # Columna podría ser la de la última línea
 
-                tokens_resultantes.append(token_para_procesar)
+        self.tokens_generados.append(Token(TT_EOF, "EOF", self.linea_actual, self.columna_actual ))
+        return self.tokens_generados
 
-                if token_para_procesar.tipo == TT_EOF:
-                    break # Fin de la tokenización
-            else:
-                # Esto no debería ocurrir si obtener_siguiente_token siempre devuelve algo
-                # (al menos EOF o un error).
-                # Podría indicar un problema en la lógica de obtención de tokens.
-                print("Advertencia: obtener_siguiente_token devolvió una lista vacía inesperadamente.")
-                break
-                
-        return tokens_resultantes
-
-# Fin de la clase LexerPython

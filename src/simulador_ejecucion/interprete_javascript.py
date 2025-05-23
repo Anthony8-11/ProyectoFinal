@@ -233,9 +233,19 @@ class InterpreteJavaScript:
 
 
     def _evaluar_NodoLiteralJS(self, nodo_literal):
-        # El valor ya fue procesado por el lexer (ej. a número, cadena, booleano, None).
-        # print(f"[InterpreteJS DEBUG] Evaluando NodoLiteralJS, valor: {repr(nodo_literal.valor)}")
-        return nodo_literal.valor
+        # Si es una template literal (backticks) y contiene ${...}, procesar interpolación
+        valor = nodo_literal.valor
+        if isinstance(valor, str) and valor.find('${') != -1 and valor.count('`') == 0:
+            # Simulación básica: solo soporta variables simples ${var} en el contexto actual
+            import re
+            def reemplazo(match):
+                expr = match.group(1).strip()
+                try:
+                    return str(self.alcance_actual.obtener_valor_variable(expr))
+                except Exception:
+                    return '${' + expr + '}'
+            valor = re.sub(r'\$\{([^}]+)\}', reemplazo, valor)
+        return valor
 
     def _evaluar_NodoIdentificadorJS(self, nodo_id):
         # Busca el valor de la variable en el sistema de alcances.

@@ -864,22 +864,25 @@ class ParserTSQL:
                 token_null = self._consumir(TT_PALABRA_CLAVE, 'null') 
                 restricciones.append(token_null)
             elif lexema_actual == 'null':
-                 restricciones.append(self._consumir(TT_PALABRA_CLAVE, 'null'))
+                restricciones.append(self._consumir(TT_PALABRA_CLAVE, 'null'))
             elif lexema_actual == 'unique':
-                 restricciones.append(self._consumir(TT_PALABRA_CLAVE, 'unique'))
+                restricciones.append(self._consumir(TT_PALABRA_CLAVE, 'unique'))
             elif lexema_actual == 'default':
                 restricciones.append(self._consumir(TT_PALABRA_CLAVE, 'default'))
+                # Manejar valor por defecto: literal, función, o expresión
                 if self.token_actual and (
                     self.token_actual.tipo in [TT_LITERAL_CADENA, TT_LITERAL_NUMERICO] or
-                    (self.token_actual.tipo == TT_PALABRA_CLAVE and self.token_actual.lexema.lower() in ['getdate', 'current_timestamp']) # CORREGIDO
+                    (self.token_actual.tipo == TT_PALABRA_CLAVE and self.token_actual.lexema.lower() in ['getdate', 'current_timestamp'])
                 ):
                     default_val_token = self.token_actual
                     self._avanzar() 
                     restricciones.append(default_val_token)
                     if default_val_token.lexema.lower() in ['getdate', 'current_timestamp']:
+                        # Si es función, consumir paréntesis si existen, pero NO agregarlos a restricciones
                         if self.token_actual and self.token_actual.tipo == TT_PARENTESIS_IZQ:
-                            restricciones.append(self._consumir(TT_PARENTESIS_IZQ))
-                            restricciones.append(self._consumir(TT_PARENTESIS_DER))
+                            self._consumir(TT_PARENTESIS_IZQ)
+                        if self.token_actual and self.token_actual.tipo == TT_PARENTESIS_DER:
+                            self._consumir(TT_PARENTESIS_DER)
                 else:
                     self._error_sintactico("un valor literal o función (GETDATE, CURRENT_TIMESTAMP) después de DEFAULT")
             else:
