@@ -222,13 +222,15 @@ class ParserPython:
             if self.token_actual.tipo in [TT_NUEVA_LINEA, TT_INDENT, TT_DEDENT]: 
                 self._avanzar()
                 continue
-
             if self.token_actual and self.token_actual.tipo != TT_EOF:
-                nodo_sentencia = self._parse_sentencia_python()
-                if nodo_sentencia:
-                    sentencias.append(nodo_sentencia)
-                elif not self.errores_sintacticos and self.token_actual and self.token_actual.tipo != TT_EOF:
-                    pass 
+                try:
+                    nodo_sentencia = self._parse_sentencia_python()
+                    if nodo_sentencia:
+                        sentencias.append(nodo_sentencia)
+                except SyntaxError:
+                    # Avanzar hasta el siguiente salto de línea o EOF para intentar seguir parseando
+                    self._consumir_hasta_nueva_linea_o_eof()
+                    continue
         return sentencias
 
     def _parse_sentencia_python(self):
@@ -382,11 +384,13 @@ class ParserPython:
             while self.token_actual and self.token_actual.tipo == TT_NUEVA_LINEA: 
                 self._avanzar()
             if self.token_actual and self.token_actual.tipo != TT_DEDENT and self.token_actual.tipo != TT_EOF:
-                sentencia = self._parse_sentencia_python()
-                if sentencia:
-                    sentencias_bloque.append(sentencia)
-                elif not self.errores_sintacticos and self.token_actual and self.token_actual.tipo != TT_DEDENT:
-                    pass
+                try:
+                    sentencia = self._parse_sentencia_python()
+                    if sentencia:
+                        sentencias_bloque.append(sentencia)
+                except SyntaxError:
+                    self._consumir_hasta_nueva_linea_o_eof()
+                    continue
         if self.token_actual and self.token_actual.tipo == TT_DEDENT:
             self._consumir(TT_DEDENT)
         return NodoBloque(sentencias_bloque)

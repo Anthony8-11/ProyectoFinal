@@ -217,7 +217,14 @@ class MainWindow(QWidget):
                 self.result_area.setPlainText(resultado + "\nNo se reconoce el lenguaje o no está soportado.")
                 return
         except Exception as e:
-            self.result_area.setPlainText(resultado + f"\nError en análisis léxico: {e}")
+            # Acumular errores léxicos si ya existen
+            if 'errores_lex' in locals() and isinstance(errores_lex, list):
+                errores_lex.append(str(e))
+            else:
+                errores_lex = [str(e)]
+            # Mostrar todos los errores léxicos en la interfaz
+            resultado += "Errores léxicos encontrados:\n" + "\n".join(str(err) for err in errores_lex) + "\n"
+            self.result_area.setPlainText(resultado)
             return
         resultado += f"\nTokens generados: {len(tokens)}\n"
         if errores_lex:
@@ -250,9 +257,15 @@ class MainWindow(QWidget):
                 ast = None
                 errores_sint = ["No se pudo instanciar el parser para este lenguaje."]
         except Exception as e:
-            resultado += f"\nError en análisis sintáctico: {e}\n"
-            ast = None
-            errores_sint = [str(e)]
+            # Si ya hay errores_sint, los acumulamos, si no, creamos la lista
+            if 'errores_sint' in locals() and isinstance(errores_sint, list):
+                errores_sint.append(str(e))
+            else:
+                errores_sint = [str(e)]
+            # Mostrar todos los errores sintácticos en la interfaz
+            resultado += "Errores sintácticos encontrados:\n" + "\n".join(str(err) for err in errores_sint) + "\n"
+            self.result_area.setPlainText(resultado)
+            return
         if errores_sint:
             resultado += "Errores sintácticos encontrados:\n" + "\n".join(str(e) for e in errores_sint) + "\n"
         else:
@@ -260,46 +273,51 @@ class MainWindow(QWidget):
         # 4. Análisis semántico
         errores_sem = []
         semantico_resultado = ""
+        # Permitir análisis semántico aunque haya errores sintácticos, si ast no es None
         try:
-            if lenguaje == "Python":
-                from analizador_semantico.semantico_python import AnalizadorSemanticoPython
-                sem = AnalizadorSemanticoPython()
-                sem.analizar(ast)
-                errores_sem = getattr(sem, 'errores', [])
-            elif lenguaje == "Pascal":
-                from analizador_semantico.semantico_pascal import AnalizadorSemanticoPascal
-                sem = AnalizadorSemanticoPascal()
-                sem.analizar(ast)
-                errores_sem = getattr(sem, 'errores', [])
-            elif lenguaje == "JavaScript":
-                from analizador_semantico.semantico_javascript import AnalizadorSemanticoJS
-                sem = AnalizadorSemanticoJS()
-                sem.analizar(ast)
-                errores_sem = getattr(sem, 'errores', [])
-            elif lenguaje == "C++":
-                from analizador_semantico.semantico_cpp import AnalizadorSemanticoCPP
-                sem = AnalizadorSemanticoCPP()
-                sem.analizar(ast)
-                errores_sem = getattr(sem, 'errores', [])
-            elif lenguaje == "PL/SQL":
-                from analizador_semantico.semantico_plsql import AnalizadorSemanticoPLSQL
-                sem = AnalizadorSemanticoPLSQL()
-                sem.analizar(ast)
-                errores_sem = getattr(sem, 'errores', [])
-            elif lenguaje == "T-SQL":
-                from analizador_semantico.semantico_tsql import AnalizadorSemanticoTSQL
-                sem = AnalizadorSemanticoTSQL()
-                sem.analizar(ast)
-                errores_sem = getattr(sem, 'errores', [])
-            elif lenguaje == "HTML":
-                from analizador_semantico.semantico_html import AnalizadorSemanticoHTML
-                sem = AnalizadorSemanticoHTML()
-                sem.analizar(ast)
-                errores_sem = getattr(sem, 'errores', [])
-            else:
-                errores_sem = ["No se reconoce el lenguaje para análisis semántico."]
+            if ast is not None:
+                if lenguaje == "Python":
+                    from analizador_semantico.semantico_python import AnalizadorSemanticoPython
+                    sem = AnalizadorSemanticoPython()
+                    sem.analizar(ast)
+                    errores_sem = getattr(sem, 'errores', [])
+                elif lenguaje == "Pascal":
+                    from analizador_semantico.semantico_pascal import AnalizadorSemanticoPascal
+                    sem = AnalizadorSemanticoPascal()
+                    sem.analizar(ast)
+                    errores_sem = getattr(sem, 'errores', [])
+                elif lenguaje == "JavaScript":
+                    from analizador_semantico.semantico_javascript import AnalizadorSemanticoJS
+                    sem = AnalizadorSemanticoJS()
+                    sem.analizar(ast)
+                    errores_sem = getattr(sem, 'errores', [])
+                elif lenguaje == "C++":
+                    from analizador_semantico.semantico_cpp import AnalizadorSemanticoCPP
+                    sem = AnalizadorSemanticoCPP()
+                    sem.analizar(ast)
+                    errores_sem = getattr(sem, 'errores', [])
+                elif lenguaje == "PL/SQL":
+                    from analizador_semantico.semantico_plsql import AnalizadorSemanticoPLSQL
+                    sem = AnalizadorSemanticoPLSQL()
+                    sem.analizar(ast)
+                    errores_sem = getattr(sem, 'errores', [])
+                elif lenguaje == "T-SQL":
+                    from analizador_semantico.semantico_tsql import AnalizadorSemanticoTSQL
+                    sem = AnalizadorSemanticoTSQL()
+                    sem.analizar(ast)
+                    errores_sem = getattr(sem, 'errores', [])
+                elif lenguaje == "HTML":
+                    from analizador_semantico.semantico_html import AnalizadorSemanticoHTML
+                    sem = AnalizadorSemanticoHTML()
+                    sem.analizar(ast)
+                    errores_sem = getattr(sem, 'errores', [])
+                else:
+                    errores_sem = ["No se reconoce el lenguaje para análisis semántico."]
         except Exception as e:
-            errores_sem = [f"Error en análisis semántico: {e}"]
+            if 'errores_sem' in locals() and isinstance(errores_sem, list):
+                errores_sem.append(f"Error en análisis semántico: {e}")
+            else:
+                errores_sem = [f"Error en análisis semántico: {e}"]
         if errores_sem:
             semantico_resultado = "Errores semánticos encontrados:\n" + "\n".join(str(e) for e in errores_sem) + "\n"
         else:
@@ -367,7 +385,8 @@ class MainWindow(QWidget):
                 <span style='color:{'#ff1744' if errores_lex else '#00e676'};font-weight:bold'>{' ' if errores_lex else 'Sin errores léxicos.'}</span><br>
                 """
                 if errores_lex:
-                    resultado_html += "<span style='color:#ff1744'>Errores léxicos encontrados:</span><br>" + "<br>".join(f"<span style='color:#ff5252'>{str(e)}</span>" for e in errores_lex) + "<br>"
+                    resultado_html += "<span style='color:#ff1744'>Errores léxicos encontrados:</span>"
+                    resultado_html += "<ol style='color:#ff5252'>" + "".join(f"<li>{str(e)}</li>" for e in errores_lex) + "</ol>"
                 # Tokens destacados
                 def colorear_token_html(token):
                     if token.tipo == 'ETIQUETA_APERTURA':
@@ -389,10 +408,12 @@ class MainWindow(QWidget):
                 resultado_html += "<hr style='border:1px solid #7c4dff;'><b style='color:#7c4dff'>Análisis sintáctico:</b><br>"
                 resultado_html += f"<span style='color:{'#ff1744' if errores_sint else '#00e676'};font-weight:bold'>{' ' if errores_sint else 'Sin errores sintácticos.'}</span><br>"
                 if errores_sint:
-                    resultado_html += "<span style='color:#ff1744'>Errores sintácticos encontrados:</span><br>" + "<br>".join(f"<span style='color:#ff5252'>{str(e)}</span>" for e in errores_sint) + "<br>"
+                    resultado_html += "<span style='color:#ff1744'>Errores sintácticos encontrados:</span>"
+                    resultado_html += "<ol style='color:#ff5252'>" + "".join(f"<li>{str(e)}</li>" for e in errores_sint) + "</ol>"
                 resultado_html += "<hr style='border:1px solid #ffb300;'><b style='color:#ffb300'>Análisis semántico:</b><br>"
                 if errores_sem:
-                    resultado_html += "<span style='color:#ff1744'>Errores semánticos encontrados:</span><br>" + "<br>".join(f"<span style='color:#ff5252'>{str(e)}</span>" for e in errores_sem) + "<br>"
+                    resultado_html += "<span style='color:#ff1744'>Errores semánticos encontrados:</span>"
+                    resultado_html += "<ol style='color:#ff5252'>" + "".join(f"<li>{str(e)}</li>" for e in errores_sem) + "</ol>"
                 else:
                     resultado_html += "<span style='color:#00e676'>Sin errores semánticos.</span><br>"
                 if not errores_lex and not errores_sint and ast:
@@ -426,7 +447,8 @@ class MainWindow(QWidget):
                 <span style='color:{'#ff1744' if errores_lex else '#00e676'};font-weight:bold'>{' ' if errores_lex else 'Sin errores léxicos.'}</span><br>
                 """
                 if errores_lex:
-                    resultado_html += "<span style='color:#ff1744'>Errores léxicos encontrados:</span><br>" + "<br>".join(f"<span style='color:#ff5252;background:#2d1e1e;padding:2px 6px;border-radius:4px;margin:2px 0;display:inline-block;'>&lt;Error HTML&gt; {str(e)}</span>" for e in errores_lex) + "<br>"
+                    resultado_html += "<span style='color:#ff1744'>Errores léxicos encontrados:</span>"
+                    resultado_html += "<ol style='color:#ff5252'>" + "".join(f"<li>{str(e)}</li>" for e in errores_lex) + "</ol>"
                 # Mostrar tokens HTML resaltados
                 resultado_html += f"<span style='color:#b0bec5'>Tokens generados: {len(tokens)}</span><br>"
                 if tokens:
@@ -452,7 +474,8 @@ class MainWindow(QWidget):
                 resultado_html += "<hr style='border:1px solid #7c4dff;'><b style='color:#7c4dff'>Análisis sintáctico:</b><br>"
                 resultado_html += f"<span style='color:{'#ff1744' if errores_sint else '#00e676'};font-weight:bold'>{' ' if errores_sint else 'Sin errores sintácticos.'}</span><br>"
                 if errores_sint:
-                    resultado_html += "<span style='color:#ff1744'>Errores sintácticos encontrados:</span><br>" + "<br>".join(f"<span style='color:#ff5252;background:#2d1e1e;padding:2px 6px;border-radius:4px;margin:2px 0;display:inline-block;'>&lt;Error HTML&gt; {str(e)}</span>" for e in errores_sint) + "<br>"
+                    resultado_html += "<span style='color:#ff1744'>Errores sintácticos encontrados:</span>"
+                    resultado_html += "<ol style='color:#ff5252'>" + "".join(f"<li>{str(e)}</li>" for e in errores_sint) + "</ol>"
                 resultado_html += "<hr style='border:1px solid #ffb300;'><b style='color:#ffb300'>Análisis semántico:</b><br>"
                 resultado_html += "<span style='color:#b0bec5'>(Análisis semántico no implementado en este ejemplo)</span><br>"
                 if not errores_lex and not errores_sint and ast:
@@ -479,87 +502,45 @@ class MainWindow(QWidget):
             <span style='color:{'#ff1744' if errores_lex else '#00e676'};font-weight:bold'>{' ' if errores_lex else 'Sin errores léxicos.'}</span><br>
             """
             if errores_lex:
-                resultado_html += "<span style='color:#ff1744'>Errores léxicos encontrados:</span><br>" + "<br>".join(f"<span style='color:#ff5252'>{str(e)}</span>" for e in errores_lex) + "<br>"
+                resultado_html += "<span style='color:#ff1744'>Errores léxicos encontrados:</span>"
+                resultado_html += "<ol style='color:#ff5252'>" + "".join(f"<li>{str(e)}</li>" for e in errores_lex) + "</ol>"
             resultado_html += f"<span style='color:#b0bec5'>Tokens generados: {len(tokens)}</span><br>"
             resultado_html += "<hr><b style='color:#7c4dff'>Análisis sintáctico:</b><br>"
             resultado_html += f"<span style='color:{'#ff1744' if errores_sint else '#00e676'};font-weight:bold'>{' ' if errores_sint else 'Sin errores sintácticos.'}</span><br>"
             if errores_sint:
-                resultado_html += "<span style='color:#ff1744'>Errores sintácticos encontrados:</span><br>" + "<br>".join(f"<span style='color:#ff5252'>{str(e)}</span>" for e in errores_sint) + "<br>"
+                resultado_html += "<span style='color:#ff1744'>Errores sintácticos encontrados:</span>"
+                resultado_html += "<ol style='color:#ff5252'>" + "".join(f"<li>{str(e)}</li>" for e in errores_sint) + "</ol>"
             resultado_html += "<hr><b style='color:#ffb300'>Análisis semántico:</b><br>"
             if errores_sem:
-                resultado_html += "<span style='color:#ff1744'>Errores semánticos encontrados:</span><br>" + "<br>".join(f"<span style='color:#ff5252'>{str(e)}</span>" for e in errores_sem) + "<br>"
+                resultado_html += "<span style='color:#ff1744'>Errores semánticos encontrados:</span>"
+                resultado_html += "<ol style='color:#ff5252'>" + "".join(f"<li>{str(e)}</li>" for e in errores_sem) + "</ol>"
             else:
                 resultado_html += "<span style='color:#00e676'>Sin errores semánticos.</span><br>"
-            if not errores_lex and not errores_sint and ast:
-                resultado_html += "<hr><b style='color:#00bfae'>Ejecución del código:</b><br>"
-                if mensaje_creacion_tabla:
-                    resultado_html += f"<span style='color:#ffd54f'>{mensaje_creacion_tabla}</span><br>"
-                if salida_ejecucion:
-                    import re
-                    def formatear_salida_ejecucion(linea):
-                        # SQL: inserciones, actualizaciones, eliminaciones
-                        match = re.match(r"Simulación: (\d+) fila insertada en '([\w_]+)'. Valores: (\{.*\})", linea)
-                        if match:
-                            n, tabla, valores = match.groups()
-                            return f"<span style='color:#00e676'><b>{n} fila insertada</b> en <b>{tabla}</b>:</span><br><span style='color:#ffd54f;word-break:break-all;margin-left:1em'>→ {valores}</span>"
-                        match = re.match(r"Simulación: (\d+) filas insertadas en '([\w_]+)'. Valores: (\[.*\])", linea)
-                        if match:
-                            n, tabla, valores = match.groups()
-                            return f"<span style='color:#00e676'><b>{n} filas insertadas</b> en <b>{tabla}</b>:</span><br><span style='color:#ffd54f;word-break:break-all;margin-left:1em'>→ {valores}</span>"
-                        match = re.match(r"Simulación: (\d+) fila actualizada en '([\w_]+)'. Valores: (\{.*\})", linea)
-                        if match:
-                            n, tabla, valores = match.groups()
-                            return f"<span style='color:#2979ff'><b>{n} fila actualizada</b> en <b>{tabla}</b>:</span><br><span style='color:#ffd54f;word-break:break-all;margin-left:1em'>→ {valores}</span>"
-                        match = re.match(r"Simulación: (\d+) fila eliminada de '([\w_]+)'", linea)
-                        if match:
-                            n, tabla = match.groups()
-                            return f"<span style='color:#ff1744'><b>{n} fila eliminada</b> de <b>{tabla}</b></span>"
-                        match = re.match(r"Simulación: (\d+) filas eliminadas de '([\w_]+)'", linea)
-                        if match:
-                            n, tabla = match.groups()
-                            return f"<span style='color:#ff1744'><b>{n} filas eliminadas</b> de <b>{tabla}</b></span>"
-                        # Prints y resultados generales
-                        if re.match(r"\s*print\s*[:=]?", linea, re.IGNORECASE) or linea.strip().startswith('Salida:'):
-                            return f"<span style='color:#ffd54f'>{linea}</span>"
-                        # Errores
-                        if re.search(r"error|exception|traceback|syntax|NameError|TypeError|ValueError", linea, re.IGNORECASE):
-                            return f"<span style='color:#ff1744'>{linea}</span>"
-                        # Advertencias
-                        if re.search(r"warning|advertencia", linea, re.IGNORECASE):
-                            return f"<span style='color:#ffb300'>{linea}</span>"
-                        # Resultados numéricos o de evaluación
-                        if re.match(r"Resultado: ", linea):
-                            return f"<span style='color:#2979ff'>{linea}</span>"
-                        # Mensajes de éxito genéricos
-                        if re.match(r"Éxito|Success", linea, re.IGNORECASE):
-                            return f"<span style='color:#00e676'>{linea}</span>"
-                        return f"<span style='color:#fff'>{linea}</span>"
-                    salida_html = "<br>".join(formatear_salida_ejecucion(l) for l in salida_ejecucion.splitlines())
-                    resultado_html += f"<pre style='background:#23242b;border-radius:6px;padding:8px;color:#fff;white-space:pre-wrap;word-break:break-all'>{salida_html}</pre>"
-                if not mensaje_creacion_tabla and not salida_ejecucion:
-                    resultado_html += "<span style='color:#b0bec5'>(Aquí iría la ejecución real del código si el intérprete está implementado)</span><br>"
             resultado_html += "</div>"
             self.result_area.setHtml(resultado_html)
             self.result_area.moveCursor(QTextCursor.End)
             return
         # Colorear errores
-        # --- NUEVO: Mostrar errores con formato HTML amigable ---
-        if errores_lex or errores_sint:
+        # --- NUEVO: Mostrar errores con formato HTML amigable para todos los lenguajes ---
+        if errores_lex or errores_sint or errores_sem:
             resultado_html = f"""
             <div style='font-size:15px;background:#23242b;color:#f8f8f2;border-radius:8px;padding:16px 16px 10px 16px;'>
             <hr><b style='color:#00bcd4'>Análisis léxico:</b><br>
             <span style='color:{'#ff1744' if errores_lex else '#00e676'};font-weight:bold'>{' ' if errores_lex else 'Sin errores léxicos.'}</span><br>
             """
             if errores_lex:
-                resultado_html += "<span style='color:#ff1744'>Errores léxicos encontrados:</span><br>" + "<br>".join(f"<span style='color:#ff5252'>{str(e)}</span>" for e in errores_lex) + "<br>"
+                resultado_html += "<span style='color:#ff1744'>Errores léxicos encontrados:</span>"
+                resultado_html += "<ol style='color:#ff5252'>" + "".join(f"<li>{str(e)}</li>" for e in errores_lex) + "</ol>"
             resultado_html += f"<span style='color:#b0bec5'>Tokens generados: {len(tokens)}</span><br>"
             resultado_html += "<hr><b style='color:#7c4dff'>Análisis sintáctico:</b><br>"
             resultado_html += f"<span style='color:{'#ff1744' if errores_sint else '#00e676'};font-weight:bold'>{' ' if errores_sint else 'Sin errores sintácticos.'}</span><br>"
             if errores_sint:
-                resultado_html += "<span style='color:#ff1744'>Errores sintácticos encontrados:</span><br>" + "<br>".join(f"<span style='color:#ff5252'>{str(e)}</span>" for e in errores_sint) + "<br>"
+                resultado_html += "<span style='color:#ff1744'>Errores sintácticos encontrados:</span>"
+                resultado_html += "<ol style='color:#ff5252'>" + "".join(f"<li>{str(e)}</li>" for e in errores_sint) + "</ol>"
             resultado_html += "<hr><b style='color:#ffb300'>Análisis semántico:</b><br>"
             if errores_sem:
-                resultado_html += "<span style='color:#ff1744'>Errores semánticos encontrados:</span><br>" + "<br>".join(f"<span style='color:#ff5252'>{str(e)}</span>" for e in errores_sem) + "<br>"
+                resultado_html += "<span style='color:#ff1744'>Errores semánticos encontrados:</span>"
+                resultado_html += "<ol style='color:#ff5252'>" + "".join(f"<li>{str(e)}</li>" for e in errores_sem) + "</ol>"
             else:
                 resultado_html += "<span style='color:#00e676'>Sin errores semánticos.</span><br>"
             resultado_html += "</div>"
