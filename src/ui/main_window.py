@@ -21,7 +21,7 @@ from detector_lenguaje.detector import detectar_lenguaje
 class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Analizador de Código Multilenguaje")
+        self.setWindowTitle("CompilaSim Pro")
         self.setMinimumSize(950, 540)
         # Tema oscuro, sin transparencia para fondo opaco
         # self.setWindowOpacity(0.9)  # Eliminado para opacidad total
@@ -84,7 +84,7 @@ class MainWindow(QWidget):
         main_layout = QVBoxLayout()
 
         # Título
-        titulo = QLabel("Analizador de Código Multilenguaje")
+        titulo = QLabel("CompilaSim Pro")
         titulo.setFont(QFont("Arial", 18, QFont.Bold))
         titulo.setAlignment(Qt.AlignCenter)
         titulo.setStyleSheet("QLabel { color: #fff; background: transparent; }")
@@ -147,12 +147,43 @@ class MainWindow(QWidget):
         self.copy_btn.clicked.connect(self.copiar_resultado)
         btn_layout.addWidget(self.clear_btn)
         btn_layout.addWidget(self.copy_btn)
+
+        # Nuevos botones para mostrar tokens y AST
+        self.show_tokens_btn = QPushButton("Ver Tokens")
+        self.show_tokens_btn.setStyleSheet(
+            "QPushButton { background: #00bcd4; color: white; border-radius: 6px; padding: 6px 18px; font-weight: bold; border: none; } "
+            "QPushButton:hover { background: #4fc3f7; }"
+        )
+        self.show_tokens_btn.clicked.connect(self.show_tokens_dialog)
+        self.show_ast_btn = QPushButton("Ver AST")
+        self.show_ast_btn.setStyleSheet(
+            "QPushButton { background: #ffb300; color: white; border-radius: 6px; padding: 6px 18px; font-weight: bold, border: none; } "
+            "QPushButton:hover { background: #ffd54f; }"
+        )
+        self.show_ast_btn.clicked.connect(self.show_ast_dialog)
+        btn_layout.addWidget(self.show_tokens_btn)
+        btn_layout.addWidget(self.show_ast_btn)
+
+        # Botón para mostrar simulación
+        self.show_sim_btn = QPushButton("Ver Simulación")
+        self.show_sim_btn.setStyleSheet(
+            "QPushButton { background: #00bfae; color: white; border-radius: 6px; padding: 6px 18px; font-weight: bold; border: none; } "
+            "QPushButton:hover { background: #1de9b6; }"
+        )
+        self.show_sim_btn.clicked.connect(self.show_simulation_dialog)
+        btn_layout.addWidget(self.show_sim_btn)
+
         right_panel.addLayout(btn_layout)
 
         layout.addLayout(right_panel, 3)
         main_layout.addLayout(layout)
         self.setLayout(main_layout)
         self.editor.textChanged.connect(self.analizar_codigo)
+
+        # Variables para almacenar tokens y AST
+        self.tokens = []
+        self.ast = None
+        self.sim_output = ""  # Nueva variable para salida de simulación
 
     def limpiar(self):
         self.editor.clear()
@@ -163,6 +194,128 @@ class MainWindow(QWidget):
         self.result_area.selectAll()
         self.result_area.copy()
         self.result_area.moveCursor(QTextCursor.End)
+
+    def show_tokens_dialog(self):
+        from PyQt5.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QLabel, QPushButton
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Tokens generados")
+        dlg.setMinimumSize(600, 400)
+        layout = QVBoxLayout()
+        label = QLabel("Lista de tokens generados:")
+        layout.addWidget(label)
+        text = QTextEdit()
+        text.setReadOnly(True)
+        if self.tokens:
+            lines = [f"{i+1:03d}: {t}" for i, t in enumerate(self.tokens)]
+            text.setPlainText("\n".join(lines))
+        else:
+            text.setPlainText("No hay tokens generados.")
+        layout.addWidget(text)
+        btn = QPushButton("Cerrar")
+        btn.clicked.connect(dlg.accept)
+        layout.addWidget(btn)
+        dlg.setLayout(layout)
+        dlg.exec_()
+
+    def show_ast_dialog(self):
+        from PyQt5.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QLabel, QPushButton
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Árbol de Sintaxis Abstracta (AST)")
+        dlg.setMinimumSize(600, 400)
+        layout = QVBoxLayout()
+        label = QLabel("AST generado:")
+        layout.addWidget(label)
+        text = QTextEdit()
+        text.setReadOnly(True)
+        if self.ast:
+            # Si el AST tiene un método para mostrar como árbol ASCII, úsalo
+            ascii_tree = None
+            if hasattr(self.ast, 'to_ascii') and callable(getattr(self.ast, 'to_ascii')):
+                ascii_tree = self.ast.to_ascii()
+            elif hasattr(self.ast, 'to_ascii_tree') and callable(getattr(self.ast, 'to_ascii_tree')):
+                ascii_tree = self.ast.to_ascii_tree()
+            if ascii_tree:
+                text.setPlainText(ascii_tree)
+            else:
+                text.setPlainText(str(self.ast))
+        else:
+            text.setPlainText("No se ha generado un AST.")
+        layout.addWidget(text)
+        btn = QPushButton("Cerrar")
+        btn.clicked.connect(dlg.accept)
+        layout.addWidget(btn)
+        dlg.setLayout(layout)
+        dlg.exec_()
+
+    def show_simulation_dialog(self):
+        from PyQt5.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QLabel, QPushButton
+        import re
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Simulación/Ejecución del código")
+        dlg.setMinimumSize(600, 400)
+        layout = QVBoxLayout()
+        label = QLabel("Salida de la simulación/ejecución:")
+        layout.addWidget(label)
+        text = QTextEdit()
+        text.setReadOnly(True)
+        text.setStyleSheet("QTextEdit { background: #23242b; color: #f8f8f2; border-radius: 8px; padding: 8px; border: 1px solid #444; }")
+        def format_sim_output_html(sim_output):
+            def format_line(line):
+                # SQL: inserciones, actualizaciones, eliminaciones
+                match = re.match(r"Simulación: (\d+) fila insertada en '([\w_]+)'. Valores: (\{.*\})", line)
+                if match:
+                    n, tabla, valores = match.groups()
+                    return f"<span style='color:#00e676'><b>{n} fila insertada</b> en <b>{tabla}</b>:</span><br><span style='color:#ffd54f;word-break:break-all;margin-left:1em'>→ {valores}</span>"
+                match = re.match(r"Simulación: (\d+) filas insertadas en '([\w_]+)'. Valores: (\[.*\])", line)
+                if match:
+                    n, tabla, valores = match.groups()
+                    return f"<span style='color:#00e676'><b>{n} filas insertadas</b> en <b>{tabla}</b>:</span><br><span style='color:#ffd54f;word-break:break-all;margin-left:1em'>→ {valores}</span>"
+                match = re.match(r"Simulación: (\d+) fila actualizada en '([\w_]+)'. Valores: (\{.*\})", line)
+                if match:
+                    n, tabla, valores = match.groups()
+                    return f"<span style='color:#2979ff'><b>{n} fila actualizada</b> en <b>{tabla}</b>:</span><br><span style='color:#ffd54f;word-break:break-all;margin-left:1em'>→ {valores}</span>"
+                match = re.match(r"Simulación: (\d+) fila eliminada de '([\w_]+)'", line)
+                if match:
+                    n, tabla = match.groups()
+                    return f"<span style='color:#ff1744'><b>{n} fila eliminada</b> de <b>{tabla}</b></span>"
+                match = re.match(r"Simulación: (\d+) filas eliminadas de '([\w_]+)'", line)
+                if match:
+                    n, tabla = match.groups()
+                    return f"<span style='color:#ff1744'><b>{n} filas eliminadas</b> de <b>{tabla}</b></span>"
+                # Prints y resultados generales
+                if re.match(r"\s*print\s*[:=]?", line, re.IGNORECASE) or line.strip().startswith('Salida:'):
+                    return f"<span style='color:#ffd54f'>{line}</span>"
+                # Errores
+                if re.search(r"error|exception|traceback|syntax|NameError|TypeError|ValueError", line, re.IGNORECASE):
+                    return f"<span style='color:#ff1744'>{line}</span>"
+                # Advertencias
+                if re.search(r"warning|advertencia", line, re.IGNORECASE):
+                    return f"<span style='color:#ffb300'>{line}</span>"
+                # Resultados numéricos o de evaluación
+                if re.match(r"Resultado: ", line):
+                    return f"<span style='color:#2979ff'>{line}</span>"
+                # Mensajes de éxito genéricos
+                if re.match(r"Éxito|Success", line, re.IGNORECASE):
+                    return f"<span style='color:#00e676'>{line}</span>"
+                return f"<span style='color:#fff'>{line}</span>"
+            lines = sim_output.splitlines()
+            html_lines = [format_line(l) for l in lines]
+            # Cambia la fuente aquí:
+            return ("<pre style='background:#23242b;border-radius:6px;padding:8px;"
+                    "color:#fff;white-space:pre-wrap;word-break:break-all;"
+                    "font-family:Consolas, 'Fira Mono', 'JetBrains Mono', 'Menlo', 'Monaco', 'Liberation Mono', 'Courier New', monospace;"
+                    "font-size:15px;"
+                    "'>" + "<br>".join(html_lines) + "</pre>")
+        if self.sim_output and self.sim_output.strip():
+            text.setHtml(format_sim_output_html(self.sim_output))
+        else:
+            text.setHtml("<span style='color:#b0bec5'>No hay salida de simulación disponible.</span>")
+        layout.addWidget(text)
+        btn = QPushButton("Cerrar")
+        btn.clicked.connect(dlg.accept)
+        layout.addWidget(btn)
+        dlg.setLayout(layout)
+        dlg.exec_()
 
     def analizar_codigo(self):
         codigo = self.editor.toPlainText()
@@ -216,6 +369,7 @@ class MainWindow(QWidget):
             else:
                 self.result_area.setPlainText(resultado + "\nNo se reconoce el lenguaje o no está soportado.")
                 return
+            self.tokens = tokens  # Guardar tokens para el botón
         except Exception as e:
             # Acumular errores léxicos si ya existen
             if 'errores_lex' in locals() and isinstance(errores_lex, list):
@@ -256,6 +410,7 @@ class MainWindow(QWidget):
             else:
                 ast = None
                 errores_sint = ["No se pudo instanciar el parser para este lenguaje."]
+            self.ast = ast  # Guardar AST para el botón
         except Exception as e:
             # Si ya hay errores_sint, los acumulamos, si no, creamos la lista
             if 'errores_sint' in locals() and isinstance(errores_sint, list):
@@ -374,152 +529,152 @@ class MainWindow(QWidget):
                 salida_ejecucion = buffer.getvalue()
             except Exception as e:
                 salida_ejecucion = f"[Error en ejecución del intérprete]: {e}\n"
-            # --- Personalización especial para HTML ---
-            if lenguaje == "HTML":
-                # Bloque visual especial para HTML
-                resultado_html = f"""
-                <div style='font-size:15px;background:#23242b;color:#f8f8f2;border-radius:8px;padding:16px 16px 10px 16px;'>
-                <div style='font-size:17px;font-weight:bold;color:#4fc3f7;margin-bottom:8px;'>Análisis de HTML</div>
-                <hr style='border:1px solid #4fc3f7;'>
-                <b style='color:#00bcd4'>Análisis léxico:</b><br>
-                <span style='color:{'#ff1744' if errores_lex else '#00e676'};font-weight:bold'>{' ' if errores_lex else 'Sin errores léxicos.'}</span><br>
-                """
-                if errores_lex:
-                    resultado_html += "<span style='color:#ff1744'>Errores léxicos encontrados:</span>"
-                    resultado_html += "<ol style='color:#ff5252'>" + "".join(f"<li>{str(e)}</li>" for e in errores_lex) + "</ol>"
-                # Tokens destacados
-                def colorear_token_html(token):
-                    if token.tipo == 'ETIQUETA_APERTURA':
-                        return f"<span style='color:#4fc3f7;font-weight:bold'>&lt;{token.valor}&gt;</span>"
-                    if token.tipo == 'ETIQUETA_CIERRE':
-                        return f"<span style='color:#ffb300;font-weight:bold'>&lt;/{token.valor}&gt;</span>"
-                    if token.tipo == 'ATRIBUTO':
-                        return f"<span style='color:#ffd54f'>{token.valor}</span>"
-                    if token.tipo == 'VALOR':
-                        return f"<span style='color:#81c784'>'{token.valor}'</span>"
-                    if token.tipo == 'TEXTO':
-                        return f"<span style='color:#fff'>{token.valor}</span>"
-                    if token.tipo == 'ERROR_HTML':
-                        return f"<span style='color:#ff1744;background:#fff2;border-radius:4px;padding:1px 4px;'>{token.valor}</span>"
-                    return f"<span style='color:#b0bec5'>{token.valor}</span>"
-                tokens_html = " ".join(colorear_token_html(t) for t in tokens)
-                resultado_html += f"<span style='color:#b0bec5'>Tokens generados: {len(tokens)}</span><br>"
-                resultado_html += f"<div style='background:#e3e6ed;border-radius:8px;padding:8px;margin:8px 0 12px 0;word-break:break-all;color:#23262e;'>{tokens_html}</div>"
-                resultado_html += "<hr style='border:1px solid #7c4dff;'><b style='color:#7c4dff'>Análisis sintáctico:</b><br>"
-                resultado_html += f"<span style='color:{'#ff1744' if errores_sint else '#00e676'};font-weight:bold'>{' ' if errores_sint else 'Sin errores sintácticos.'}</span><br>"
-                if errores_sint:
-                    resultado_html += "<span style='color:#ff1744'>Errores sintácticos encontrados:</span>"
-                    resultado_html += "<ol style='color:#ff5252'>" + "".join(f"<li>{str(e)}</li>" for e in errores_sint) + "</ol>"
-                resultado_html += "<hr style='border:1px solid #ffb300;'><b style='color:#ffb300'>Análisis semántico:</b><br>"
-                if errores_sem:
-                    resultado_html += "<span style='color:#ff1744'>Errores semánticos encontrados:</span>"
-                    resultado_html += "<ol style='color:#ff5252'>" + "".join(f"<li>{str(e)}</li>" for e in errores_sem) + "</ol>"
-                else:
-                    resultado_html += "<span style='color:#00e676'>Sin errores semánticos.</span><br>"
-                if not errores_lex and not errores_sint and ast:
-                    resultado_html += "<hr style='border:1px solid #00bfae;'><b style='color:#00bfae'>Visualización HTML:</b><br>"
-                    if salida_ejecucion:
-                        # Vista previa renderizada (fondo claro para mejor legibilidad)
-                        resultado_html += "<div style='margin:12px 0 8px 0;padding:8px;background:#fff;border-radius:8px;box-shadow:0 2px 8px #0003;border:1.5px solid #ffd54f;'>"
-                        resultado_html += "<b style='color:#ffd54f;'>Vista previa:</b><br>"
-                        resultado_html += f"<div style='background:#fff;border-radius:6px;padding:10px;margin:8px 0;box-shadow:0 2px 8px #ffd54f44; color:#23262e; min-height:30px;max-height:200px;overflow:auto;'>{salida_ejecucion}</div>"
-                        resultado_html += "</div>"
-                        # Mostrar el HTML fuente generado
-                        resultado_html += "<b style='color:#b0bec5;'>HTML generado:</b><br>"
-                        resultado_html += f"<pre style='background:#23242b;border-radius:6px;padding:8px;color:#ffd54f;white-space:pre-wrap;word-break:break-all;max-height:120px;overflow:auto;'>{self.editor.toPlainText()}</pre>"
-                    else:
-                        resultado_html += "<span style='color:#b0bec5'>(No se generó salida HTML)</span><br>"
-                resultado_html += "</div>"
-                self.result_area.setHtml(resultado_html)
-                self.result_area.moveCursor(QTextCursor.End)
-                return
-            # --- Fin personalización HTML ---
-            # Construcción amigable del resultado con formato HTML
-            if lenguaje == "HTML":
-                # --- PRESENTACIÓN PERSONALIZADA PARA HTML ---
-                resultado_html = f"""
-                <div style='font-size:15px; background: linear-gradient(90deg,#23262e 60%,#ffb34722 100%); border-radius: 10px; padding: 12px;'>
-                <div style='background: linear-gradient(90deg,#ffb347 0,#ffcc33 100%); color:#23262e; border-radius:7px; padding:6px 12px; font-weight:bold; margin-bottom:10px; border:1.5px solid #ffd54f;'>
-                    <span style='font-size:16px;'>Análisis HTML</span>
-                </div>
-                <hr style='border:1px solid #ffb347;'>
-                <b style='color:#00bcd4'>Análisis léxico:</b><br>
-                <span style='color:{'#ff1744' if errores_lex else '#00e676'};font-weight:bold'>{' ' if errores_lex else 'Sin errores léxicos.'}</span><br>
-                """
-                if errores_lex:
-                    resultado_html += "<span style='color:#ff1744'>Errores léxicos encontrados:</span>"
-                    resultado_html += "<ol style='color:#ff5252'>" + "".join(f"<li>{str(e)}</li>" for e in errores_lex) + "</ol>"
-                # Mostrar tokens HTML resaltados
-                resultado_html += f"<span style='color:#b0bec5'>Tokens generados: {len(tokens)}</span><br>"
-                if tokens:
-                    resultado_html += "<div style='margin:6px 0 10px 0; padding:6px; background:#23242b; border-radius:6px; border:1px solid #444; max-height:120px; overflow:auto; font-size:13px;'>"
-                    for t in tokens:
-                        if t.tipo == 'TEXTO':
-                            resultado_html += f"<span style='color:#ffd54f;'>&lt;TEXTO&gt; '{t.valor}'</span>  "
-                        elif t.tipo == 'ETIQUETA_APERTURA':
-                            resultado_html += f"<span style='color:#81c784;'>&lt;{t.valor}&gt;</span>  "
-                        elif t.tipo == 'ETIQUETA_CIERRE':
-                            resultado_html += f"<span style='color:#e57373;'>&lt;/{t.valor}&gt;</span>  "
-                        elif t.tipo == 'ATRIBUTO':
-                            resultado_html += f"<span style='color:#4fc3f7;'>{t.valor}</span>  "
-                        elif t.tipo == 'VALOR_ATRIBUTO':
-                            resultado_html += f"<span style='color:#ffd54f;'>'{t.valor}'</span>  "
-                        elif t.tipo == 'COMENTARIO':
-                            resultado_html += f"<span style='color:#bdbdbd;'>&lt;!--{t.valor}--&gt;</span>  "
-                        elif t.tipo == 'ERROR_HTML':
-                            resultado_html += f"<span style='color:#ff5252;background:#2d1e1e;padding:2px 6px;border-radius:4px;'>&lt;Error&gt; {t.valor}</span>  "
-                        else:
-                            resultado_html += f"<span style='color:#b0bec5;'>{t.tipo}: '{t.valor}'</span>  "
-                    resultado_html += "</div>"
-                resultado_html += "<hr style='border:1px solid #7c4dff;'><b style='color:#7c4dff'>Análisis sintáctico:</b><br>"
-                resultado_html += f"<span style='color:{'#ff1744' if errores_sint else '#00e676'};font-weight:bold'>{' ' if errores_sint else 'Sin errores sintácticos.'}</span><br>"
-                if errores_sint:
-                    resultado_html += "<span style='color:#ff1744'>Errores sintácticos encontrados:</span>"
-                    resultado_html += "<ol style='color:#ff5252'>" + "".join(f"<li>{str(e)}</li>" for e in errores_sint) + "</ol>"
-                resultado_html += "<hr style='border:1px solid #ffb300;'><b style='color:#ffb300'>Análisis semántico:</b><br>"
-                resultado_html += "<span style='color:#b0bec5'>(Análisis semántico no implementado en este ejemplo)</span><br>"
-                if not errores_lex and not errores_sint and ast:
-                    resultado_html += "<hr style='border:1px solid #00bfae;'><b style='color:#00bfae'>Simulación/Visualización HTML:</b><br>"
-                    if salida_ejecucion.strip():
-                        # Vista previa renderizada
-                        resultado_html += "<div style='margin:10px 0 16px 0; padding:10px; background:linear-gradient(90deg,#23262e 60%,#ffd54f22 100%); border-radius:8px; border:1.5px solid #ffd54f;'>"
-                        resultado_html += "<b style='color:#ffd54f;'>Vista previa:</b><br>"
-                        resultado_html += f"<div style='background:#fff;border-radius:6px;padding:10px;margin:8px 0;box-shadow:0 2px 8px #ffd54f44; color:#23262e; min-height:30px;max-height:200px;overflow:auto;'>"
-                        resultado_html += salida_ejecucion
-                        resultado_html += "</div></div>"
-                        # Mostrar el HTML fuente generado
-                        resultado_html += "<b style='color:#b0bec5;'>HTML generado:</b><br>"
-                        resultado_html += f"<pre style='background:#23242b;border-radius:6px;padding:8px;color:#ffd54f;white-space:pre-wrap;word-break:break-all;max-height:120px;overflow:auto;'>{self.editor.toPlainText()}</pre>"
-                    else:
-                        resultado_html += "<span style='color:#b0bec5'>(No se generó salida HTML)</span><br>"
-                resultado_html += "</div>"
-                self.result_area.setHtml(resultado_html)
-                self.result_area.moveCursor(QTextCursor.End)
-                return
+        self.sim_output = salida_ejecucion  # Guardar salida para el botón
+        # --- Personalización especial para HTML ---
+        if lenguaje == "HTML":
+            # Bloque visual especial para HTML
             resultado_html = f"""
             <div style='font-size:15px;background:#23242b;color:#f8f8f2;border-radius:8px;padding:16px 16px 10px 16px;'>
-            <hr><b style='color:#00bcd4'>Análisis léxico:</b><br>
+            <div style='font-size:17px;font-weight:bold;color:#4fc3f7;margin-bottom:8px;'>Análisis de HTML</div>
+            <hr style='border:1px solid #4fc3f7;'>
+            <b style='color:#00bcd4'>Análisis léxico:</b><br>
             <span style='color:{'#ff1744' if errores_lex else '#00e676'};font-weight:bold'>{' ' if errores_lex else 'Sin errores léxicos.'}</span><br>
             """
             if errores_lex:
                 resultado_html += "<span style='color:#ff1744'>Errores léxicos encontrados:</span>"
                 resultado_html += "<ol style='color:#ff5252'>" + "".join(f"<li>{str(e)}</li>" for e in errores_lex) + "</ol>"
+            # Tokens destacados
+            def colorear_token_html(token):
+                if token.tipo == 'ETIQUETA_APERTURA':
+                    return f"<span style='color:#4fc3f7;font-weight:bold'>&lt;{token.valor}&gt;</span>"
+                if token.tipo == 'ETIQUETA_CIERRE':
+                    return f"<span style='color:#ffb300;font-weight:bold'>&lt;/{token.valor}&gt;</span>"
+                if token.tipo == 'ATRIBUTO':
+                    return f"<span style='color:#ffd54f'>{token.valor}</span>"
+                if token.tipo == 'VALOR':
+                    return f"<span style='color:#81c784'>'{token.valor}'</span>"
+                if token.tipo == 'TEXTO':
+                    return f"<span style='color:#fff'>{token.valor}</span>"
+                if token.tipo == 'ERROR_HTML':
+                    return f"<span style='color:#ff1744;background:#fff2;border-radius:4px;padding:1px 4px;'>{token.valor}</span>"
+                return f"<span style='color:#b0bec5'>{token.valor}</span>"
+            tokens_html = " ".join(colorear_token_html(t) for t in tokens)
             resultado_html += f"<span style='color:#b0bec5'>Tokens generados: {len(tokens)}</span><br>"
-            resultado_html += "<hr><b style='color:#7c4dff'>Análisis sintáctico:</b><br>"
+            resultado_html += f"<div style='background:#e3e6ed;border-radius:8px;padding:8px;margin:8px 0 12px 0;word-break:break-all;color:#23262e;'>{tokens_html}</div>"
+            resultado_html += "<hr style='border:1px solid #7c4dff;'><b style='color:#7c4dff'>Análisis sintáctico:</b><br>"
             resultado_html += f"<span style='color:{'#ff1744' if errores_sint else '#00e676'};font-weight:bold'>{' ' if errores_sint else 'Sin errores sintácticos.'}</span><br>"
             if errores_sint:
                 resultado_html += "<span style='color:#ff1744'>Errores sintácticos encontrados:</span>"
                 resultado_html += "<ol style='color:#ff5252'>" + "".join(f"<li>{str(e)}</li>" for e in errores_sint) + "</ol>"
-            resultado_html += "<hr><b style='color:#ffb300'>Análisis semántico:</b><br>"
+            resultado_html += "<hr style='border:1px solid #ffb300;'><b style='color:#ffb300'>Análisis semántico:</b><br>"
             if errores_sem:
                 resultado_html += "<span style='color:#ff1744'>Errores semánticos encontrados:</span>"
                 resultado_html += "<ol style='color:#ff5252'>" + "".join(f"<li>{str(e)}</li>" for e in errores_sem) + "</ol>"
             else:
                 resultado_html += "<span style='color:#00e676'>Sin errores semánticos.</span><br>"
+            if not errores_lex and not errores_sint and ast:
+                resultado_html += "<hr style='border:1px solid #00bfae;'><b style='color:#00bfae'>Visualización HTML:</b><br>"
+                if salida_ejecucion:
+                    # Vista previa renderizada (fondo claro para mejor legibilidad)
+                    resultado_html += "<div style='margin:12px 0 8px 0;padding:8px;background:#fff;border-radius:8px;box-shadow:0 2px 8px #0003;border:1.5px solid #ffd54f;'>"
+                    resultado_html += "<b style='color:#ffd54f;'>Vista previa:</b><br>"
+                    resultado_html += f"<div style='background:#fff;border-radius:6px;padding:10px;margin:8px 0;box-shadow:0 2px 8px #ffd54f44; color:#23262e; min-height:30px;max-height:200px;overflow:auto;'>{salida_ejecucion}</div>"
+                    resultado_html += "</div>"
+                    # Mostrar el HTML fuente generado
+                    resultado_html += "<b style='color:#b0bec5;'>HTML generado:</b><br>"
+                    resultado_html += f"<pre style='background:#23242b;border-radius:6px;padding:8px;color:#ffd54f;white-space:pre-wrap;word-break:break-all;max-height:120px;overflow:auto;'>{self.editor.toPlainText()}</pre>"
+                else:
+                    resultado_html += "<span style='color:#b0bec5'>(No se generó salida HTML)</span><br>"
             resultado_html += "</div>"
             self.result_area.setHtml(resultado_html)
             self.result_area.moveCursor(QTextCursor.End)
             return
+        # --- Fin personalización HTML ---
+        # Construcción amigable del resultado con formato HTML
+        if lenguaje == "HTML":
+            # --- PRESENTACIÓN PERSONALIZADA PARA HTML ---
+            resultado_html = f"""
+            <div style='font-size:15px; background: linear-gradient(90deg,#23262e 60%,#ffb34722 100%); border-radius: 10px; padding: 12px;'>
+            <div style='background: linear-gradient(90deg,#ffb347 0,#ffcc33 100%); color:#23262e; border-radius:7px; padding:6px 12px; font-weight:bold; margin-bottom:10px; border:1.5px solid #ffd54f;'>
+                <span style='font-size:16px;'>Análisis HTML</span>
+            </div>
+            <hr style='border:1px solid #ffb347;'>
+            <b style='color:#00bcd4'>Análisis léxico:</b><br>
+            <span style='color:{'#ff1744' if errores_lex else '#00e676'};font-weight:bold'>{' ' if errores_lex else 'Sin errores léxicos.'}</span><br>
+            """
+            if errores_lex:
+                resultado_html += "<span style='color:#ff1744'>Errores léxicos encontrados:</span>"
+                resultado_html += "<ol style='color:#ff5252'>" + "".join(f"<li>{str(e)}</li>" for e in errores_lex) + "</ol>"
+            # Mostrar tokens HTML resaltados
+            resultado_html += f"<span style='color:#b0bec5'>Tokens generados: {len(tokens)}</span><br>"
+            if tokens:
+                resultado_html += "<div style='margin:6px 0 10px 0; padding:6px; background:#23242b; border-radius:6px; border:1px solid #444; max-height:120px; overflow:auto; font-size:13px;'>"
+                for t in tokens:
+                    if t.tipo == 'TEXTO':
+                        resultado_html += f"<span style='color:#ffd54f;'>&lt;TEXTO&gt; '{t.valor}'</span>  "
+                    elif t.tipo == 'ETIQUETA_APERTURA':
+                        resultado_html += f"<span style='color:#81c784;'>&lt;{t.valor}&gt;</span>  "
+                    elif t.tipo == 'ETIQUETA_CIERRE':
+                        resultado_html += f"<span style='color:#e57373;'>&lt;/{t.valor}&gt;</span>  "
+                    elif t.tipo == 'ATRIBUTO':
+                        resultado_html += f"<span style='color:#4fc3f7;'>{t.valor}</span>  "
+                    elif t.tipo == 'VALOR_ATRIBUTO':
+                        resultado_html += f"<span style='color:#ffd54f;'>'{t.valor}'</span>  "
+                    elif t.tipo == 'COMENTARIO':
+                        resultado_html += f"<span style='color:#bdbdbd;'>&lt;!--{t.valor}--&gt;</span>  "
+                    elif t.tipo == 'ERROR_HTML':
+                        resultado_html += f"<span style='color:#ff5252;background:#2d1e1e;padding:2px 6px;border-radius:4px;'>&lt;Error&gt; {t.valor}</span>  "
+                    else:
+                        resultado_html += f"<span style='color:#b0bec5;'>{t.tipo}: '{t.valor}'</span>  "
+                resultado_html += "</div>"
+            resultado_html += "<hr style='border:1px solid #7c4dff;'><b style='color:#7c4dff'>Análisis sintáctico:</b><br>"
+            resultado_html += f"<span style='color:{'#ff1744' if errores_sint else '#00e676'};font-weight:bold'>{' ' if errores_sint else 'Sin errores sintácticos.'}</span><br>"
+            if errores_sint:
+                resultado_html += "<span style='color:#ff1744'>Errores sintácticos encontrados:</span>"
+                resultado_html += "<ol style='color:#ff5252'>" + "".join(f"<li>{str(e)}</li>" for e in errores_sint) + "</ol>"
+            resultado_html += "<hr style='border:1px solid #ffb300;'><b style='color:#ffb300'>Análisis semántico:</b><br>"
+            resultado_html += "<span style='color:#b0bec5'>(Análisis semántico no implementado en este ejemplo)</span><br>"
+            if not errores_lex and not errores_sint and ast:
+                resultado_html += "<hr style='border:1px solid #00bfae;'><b style='color:#00bfae'>Simulación/Visualización HTML:</b><br>"
+                if salida_ejecucion.strip():
+                    # Vista previa renderizada
+                    resultado_html += "<div style='margin:10px 0 16px 0; padding:10px; background:linear-gradient(90deg,#23262e 60%,#ffd54f22 100%); border-radius:8px; border:1.5px solid #ffd54f;'>"
+                    resultado_html += "<b style='color:#ffd54f;'>Vista previa:</b><br>"
+                    resultado_html += f"<div style='background:#fff;border-radius:6px;padding:10px;margin:8px 0;box-shadow:0 2px 8px #ffd54f44; color:#23262e; min-height:30px;max-height:200px;overflow:auto;'>{salida_ejecucion}</div>"
+                    resultado_html += "</div>"
+                    # Mostrar el HTML fuente generado
+                    resultado_html += "<b style='color:#b0bec5;'>HTML generado:</b><br>"
+                    resultado_html += f"<pre style='background:#23242b;border-radius:6px;padding:8px;color:#ffd54f;white-space:pre-wrap;word-break:break-all;max-height:120px;overflow:auto;'>{self.editor.toPlainText()}</pre>"
+                else:
+                    resultado_html += "<span style='color:#b0bec5'>(No se generó salida HTML)</span><br>"
+            resultado_html += "</div>"
+            self.result_area.setHtml(resultado_html)
+            self.result_area.moveCursor(QTextCursor.End)
+            return
+        resultado_html = f"""
+        <div style='font-size:15px;background:#23242b;color:#f8f8f2;border-radius:8px;padding:16px 16px 10px 16px;'>
+        <hr><b style='color:#00bcd4'>Análisis léxico:</b><br>
+        <span style='color:{'#ff1744' if errores_lex else '#00e676'};font-weight:bold'>{' ' if errores_lex else 'Sin errores léxicos.'}</span><br>
+        """
+        if errores_lex:
+            resultado_html += "<span style='color:#ff1744'>Errores léxicos encontrados:</span>"
+            resultado_html += "<ol style='color:#ff5252'>" + "".join(f"<li>{str(e)}</li>" for e in errores_lex) + "</ol>"
+        resultado_html += f"<span style='color:#b0bec5'>Tokens generados: {len(tokens)}</span><br>"
+        resultado_html += "<hr><b style='color:#7c4dff'>Análisis sintáctico:</b><br>"
+        resultado_html += f"<span style='color:{'#ff1744' if errores_sint else '#00e676'};font-weight:bold'>{' ' if errores_sint else 'Sin errores sintácticos.'}</span><br>"
+        if errores_sint:
+            resultado_html += "<span style='color:#ff1744'>Errores sintácticos encontrados:</span>"
+            resultado_html += "<ol style='color:#ff5252'>" + "".join(f"<li>{str(e)}</li>" for e in errores_sint) + "</ol>"
+        resultado_html += "<hr><b style='color:#ffb300'>Análisis semántico:</b><br>"
+        if errores_sem:
+            resultado_html += "<span style='color:#ff1744'>Errores semánticos encontrados:</span>"
+            resultado_html += "<ol style='color:#ff5252'>" + "".join(f"<li>{str(e)}</li>" for e in errores_sem) + "</ol>"
+        else:
+            resultado_html += "<span style='color:#00e676'>Sin errores semánticos.</span><br>"
+        resultado_html += "</div>"
+        self.result_area.setHtml(resultado_html)
+        self.result_area.moveCursor(QTextCursor.End)
+        return
         # Colorear errores
         # --- NUEVO: Mostrar errores con formato HTML amigable para todos los lenguajes ---
         if errores_lex or errores_sint or errores_sem:
@@ -544,11 +699,65 @@ class MainWindow(QWidget):
             else:
                 resultado_html += "<span style='color:#00e676'>Sin errores semánticos.</span><br>"
             resultado_html += "</div>"
+            # Mostrar simulación/ejecución si no hay errores léxicos ni sintácticos y hay AST
+            if not errores_lex and not errores_sint and ast:
+                resultado_html += "<div style='margin-top:18px;'><hr><b style='color:#00bfae'>Ejecución/Simulación del código:</b><br>"
+                if salida_ejecucion:
+                    import re
+                    def formatear_salida_ejecucion(linea):
+                        # SQL: inserciones, actualizaciones, eliminaciones
+                        match = re.match(r"Simulación: (\d+) fila insertada en '([\w_]+)'. Valores: (\{.*\})", linea)
+                        if match:
+                            n, tabla, valores = match.groups()
+                            return f"<span style='color:#00e676'><b>{n} fila insertada</b> en <b>{tabla}</b>:</span><br><span style='color:#ffd54f;word-break:break-all;margin-left:1em'>→ {valores}</span>"
+                        match = re.match(r"Simulación: (\d+) filas insertadas en '([\w_]+)'. Valores: (\[.*\])", linea)
+                        if match:
+                            n, tabla, valores = match.groups()
+                            return f"<span style='color:#00e676'><b>{n} filas insertadas</b> en <b>{tabla}</b>:</span><br><span style='color:#ffd54f;word-break:break-all;margin-left:1em'>→ {valores}</span>"
+                        match = re.match(r"Simulación: (\d+) fila actualizada en '([\w_]+)'. Valores: (\{.*\})", linea)
+                        if match:
+                            n, tabla, valores = match.groups()
+                            return f"<span style='color:#2979ff'><b>{n} fila actualizada</b> en <b>{tabla}</b>:</span><br><span style='color:#ffd54f;word-break:break-all;margin-left:1em'>→ {valores}</span>"
+                        match = re.match(r"Simulación: (\d+) fila eliminada de '([\w_]+)'", linea)
+                        if match:
+                            n, tabla = match.groups()
+                            return f"<span style='color:#ff1744'><b>{n} fila eliminada</b> de <b>{tabla}</b></span>"
+                        match = re.match(r"Simulación: (\d+) filas eliminadas de '([\w_]+)'", linea)
+                        if match:
+                            n, tabla = match.groups()
+                            return f"<span style='color:#ff1744'><b>{n} filas eliminadas</b> de <b>{tabla}</b></span>"
+                        # Prints y resultados generales
+                        if re.match(r"\s*print\s*[:=]?", linea, re.IGNORECASE) or linea.strip().startswith('Salida:'):
+                            return f"<span style='color:#ffd54f'>{linea}</span>"
+                        # Errores
+                        if re.search(r"error|exception|traceback|syntax|NameError|TypeError|ValueError", linea, re.IGNORECASE):
+                            return f"<span style='color:#ff1744'>{linea}</span>"
+                        # Advertencias
+                        if re.search(r"warning|advertencia", linea, re.IGNORECASE):
+                            return f"<span style='color:#ffb300'>{linea}</span>"
+                        # Resultados numéricos o de evaluación
+                        if re.match(r"Resultado: ", linea):
+                            return f"<span style='color:#2979ff'>{linea}</span>"
+                        # Mensajes de éxito genéricos
+                        if re.match(r"Éxito|Success", linea, re.IGNORECASE):
+                            return f"<span style='color:#00e676'>{linea}</span>"
+                        # Encabezados de tablas (SELECT)
+                        if re.match(r"\s*-+\s*", linea):
+                            return f"<span style='color:#888'>{linea}</span>"
+                        if re.match(r"\s*--- Resultado del SELECT ---", linea):
+                            return f"<span style='color:#00bfae;font-weight:bold'>{linea}</span>"
+                        if re.match(r"\s*\(0 filas afectadas\)", linea):
+                            return f"<span style='color:#bdbdbd'>{linea}</span>"
+                        # General
+                        return f"<span style='color:#fff'>{linea}</span>"
+                    salida_html = "<br>".join(formatear_salida_ejecucion(l) for l in salida_ejecucion.splitlines())
+                    resultado_html += f"<pre style='background:#23242b;border-radius:6px;padding:8px;color:#fff;white-space:pre-wrap;word-break:break-all'>{salida_html}</pre>"
+                else:
+                    resultado_html += "<span style='color:#b0bec5'>(Aquí iría la ejecución real del código si el intérprete está implementado)</span><br>"
+                resultado_html += "</div>"
             self.result_area.setHtml(resultado_html)
             self.result_area.moveCursor(QTextCursor.End)
             return
-        # Al final, scroll automático al final del resultado
-        self.result_area.moveCursor(QTextCursor.End)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

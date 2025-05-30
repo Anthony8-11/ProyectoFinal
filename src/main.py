@@ -9,7 +9,7 @@ from simulador_ejecucion.interprete_python import ErrorTiempoEjecucionPython, Va
 # --- CONTROL DE CONFIGURACIÓN PARA PRUEBAS ---
 # Para probar un solo archivo, pon su nombre aquí (ej. "prueba_pascal.pas").
 # Si es None, se probarán todos los archivos en la lista archivos_a_probar.
-ARCHIVO_ESPECIFICO_A_PROBAR = "prueba_pascal.pas" # Ejemplo para probar solo Python
+ARCHIVO_ESPECIFICO_A_PROBAR = "prueba_plsql.sql" # Ejemplo para probar solo Python
 # ARCHIVO_ESPECIFICO_A_PROBAR = "prueba_tsql.sql" # Ejemplo para probar solo T-SQL
 # ARCHIVO_ESPECIFICO_A_PROBAR = "prueba_pascal.pas" # Ejemplo para probar solo Pascal
 
@@ -125,6 +125,9 @@ def analizar_archivo_y_mostrar(ruta_archivo, nombre_archivo_simple):
                 tokens_obtenidos = lexer_pas.tokenizar()
                 print(f"Total de tokens generados (Pascal): {len(tokens_obtenidos)}")
                 tiene_errores_lexicos_pascal = any(t.tipo == TT_ERROR_PASCAL for t in tokens_obtenidos)
+                # Descomentar para imprimir todos los tokens de Pascal
+                for i, token_obj in enumerate(tokens_obtenidos):
+                    print(f"  {i+1:03d}: {token_obj}")
                 if tiene_errores_lexicos_pascal:
                     print(">>> Se encontraron errores léxicos en el código Pascal. <<<")
                 elif tokens_obtenidos and tokens_obtenidos[-1].tipo == TT_EOF_PASCAL:
@@ -146,7 +149,7 @@ def analizar_archivo_y_mostrar(ruta_archivo, nombre_archivo_simple):
 
                 if ast_generado_pascal:
                     print("\n--- Árbol de Sintaxis Abstracto (AST) Generado (Pascal) ---")
-                    # print(ast_generado_pascal) # Descomentar para ver el AST
+                    print(ast_generado_pascal) # Descomentar para ver el AST
                     print("--- Fin del AST (Pascal) ---")
 
                     # --- Análisis Semántico Pascal ---
@@ -395,7 +398,7 @@ def analizar_archivo_y_mostrar(ruta_archivo, nombre_archivo_simple):
                     # Visualización del AST de JavaScript (si se generó)
                     if ast_generado_js:
                         print("\n--- Árbol de Sintaxis Abstracto (AST) Generado (JavaScript) ---")
-                        # print(ast_generado_js) # Imprime usando los __repr__ de los nodos AST de JS
+                        print(ast_generado_js) # Imprime usando los __repr__ de los nodos AST de JS
                         print("--- Fin del AST (JavaScript) ---")
 
                         print("\n--- Simulación de Ejecución (JavaScript) ---") 
@@ -514,6 +517,8 @@ def analizar_archivo_y_mostrar(ruta_archivo, nombre_archivo_simple):
                     tokens_obtenidos_plsql = lexer_plsql.tokenizar()
                     
                     print(f"Total de tokens generados (PL/SQL): {len(tokens_obtenidos_plsql)}")
+                    print(f"[DEBUG] Total de tokens generados (PL/SQL): {len(tokens_obtenidos_plsql)}")
+                    print(f"[DEBUG] Primeros tokens: {tokens_obtenidos_plsql[:5]}")
                     tiene_errores_lexicos_plsql = any(t.tipo == TT_ERROR_PLSQL for t in tokens_obtenidos_plsql)
                     
                     # Descomentar para imprimir todos los tokens de PL/SQL
@@ -546,6 +551,7 @@ def analizar_archivo_y_mostrar(ruta_archivo, nombre_archivo_simple):
                     if ast_generado_plsql:
                         print("\n--- Árbol de Sintaxis Abstracto (AST) Generado (PL/SQL) ---")
                         # print(ast_generado_plsql) # Descomentar para ver el AST
+                        print("[DEBUG] AST generado para PL/SQL:", ast_generado_plsql)
                         print("--- Fin del AST (PL/SQL) ---")
                         
                         # Solo si el parser no reportó errores sintácticos y se generó AST, se hace análisis semántico
@@ -558,9 +564,9 @@ def analizar_archivo_y_mostrar(ruta_archivo, nombre_archivo_simple):
                                 print(f"ERROR CRÍTICO durante el análisis semántico de PL/SQL: {e_sem_plsql}")
                                 import traceback; traceback.print_exc()
                         
-                        # (Aquí iría la llamada al Intérprete de PL/SQL cuando se implemente)
                         print("\n--- Simulación de Ejecución (PL/SQL) ---") 
                         try:
+                            print("[DEBUG] Ejecutando InterpretePLSQL...")
                             interprete_plsql = InterpretePLSQL() 
                             interprete_plsql.interpretar_script(ast_generado_plsql)
                         except Exception as e_interp_plsql:

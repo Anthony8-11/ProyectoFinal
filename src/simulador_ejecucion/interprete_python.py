@@ -239,15 +239,22 @@ class InterpretePython:
         if isinstance(nodo_expr, NodoLiteral):
             if nodo_expr.literal_token.tipo == TT_CADENA and \
                nodo_expr.literal_token.lexema.lower().startswith(('f"', "f'", 'rf"', "rf'", 'fr"', "fr'")):
-                formato_str = str(nodo_expr.valor) 
-                def reemplazar_variable(match):
-                    nombre_variable = match.group(1).strip() 
+                formato_str = str(nodo_expr.valor)
+                def reemplazar_expresion(match):
+                    expresion = match.group(1).strip()
                     try:
-                        valor_variable = self.alcance_actual.obtener(nombre_variable)
-                        return str(valor_variable)
-                    except ErrorTiempoEjecucionPython:
-                        return match.group(0) 
-                resultado_interpolado = re.sub(r'\{([a-zA-Z_][a-zA-Z0-9_]*)\}', reemplazar_variable, formato_str)
+                        # Construir un diccionario con todas las variables del alcance actual
+                        contexto = {}
+                        actual = self.alcance_actual
+                        while actual:
+                            contexto.update(actual.simbolos)
+                            actual = actual.padre
+                        # Evaluar la expresión en el contexto del alcance actual
+                        valor = eval(expresion, {"__builtins__": {}}, contexto)
+                        return str(valor)
+                    except Exception:
+                        return match.group(0)  # Si falla, dejar la expresión literal
+                resultado_interpolado = re.sub(r'\{([^{}]+)\}', reemplazar_expresion, formato_str)
                 return resultado_interpolado
             else:
                 return nodo_expr.valor 
