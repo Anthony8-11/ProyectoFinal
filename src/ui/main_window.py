@@ -133,6 +133,14 @@ class MainWindow(QWidget):
 
         # Botones
         btn_layout = QHBoxLayout()
+        # Botón para cargar archivo
+        self.load_file_btn = QPushButton("Cargar archivo")
+        self.load_file_btn.setStyleSheet(
+            "QPushButton { background: #8d6e63; color: white; border-radius: 6px; padding: 6px 18px; font-weight: bold; border: none; } "
+            "QPushButton:hover { background: #bcaaa4; }"
+        )
+        self.load_file_btn.clicked.connect(self.cargar_archivo)
+        btn_layout.addWidget(self.load_file_btn)
         self.clear_btn = QPushButton("Limpiar")
         self.clear_btn.setStyleSheet(
             "QPushButton { background: #c62828; color: white; border-radius: 6px; padding: 6px 18px; font-weight: bold; border: none; } "
@@ -758,6 +766,20 @@ class MainWindow(QWidget):
             self.result_area.setHtml(resultado_html)
             self.result_area.moveCursor(QTextCursor.End)
             return
+
+    def cargar_archivo(self):
+        from PyQt5.QtWidgets import QFileDialog, QMessageBox
+        import os
+        opciones = QFileDialog.Options()
+        opciones |= QFileDialog.ReadOnly
+        archivo, _ = QFileDialog.getOpenFileName(self, "Seleccionar archivo de texto", "", "Archivos de texto (*.txt *.sql *.py *.js *.cpp *.pas *.html);;Todos los archivos (*)", options=opciones)
+        if archivo:
+            try:
+                with open(archivo, 'r', encoding='utf-8') as f:
+                    contenido = f.read()
+                self.editor.setPlainText(contenido)
+            except Exception as e:
+                QMessageBox.critical(self, "Error al cargar archivo", f"No se pudo leer el archivo:\n{os.path.basename(archivo)}\n\nError: {e}")
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
