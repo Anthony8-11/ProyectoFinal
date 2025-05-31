@@ -4,14 +4,12 @@
 # para que el parser sepa qué esperar.
 try:
     from analizador_lexico.lexer_pascal import (
-        TT_PALABRA_RESERVADA, TT_IDENTIFICADOR, TT_NUMERO_ENTERO, TT_NUMERO_REAL,
-        TT_CADENA_LITERAL, TT_OPERADOR_ASIGNACION, TT_OPERADOR_RELACIONAL, # Añadir más si son necesarios
-        TT_OPERADOR_ARITMETICO, TT_PUNTO_Y_COMA, TT_DOS_PUNTOS, TT_PUNTO, TT_COMA,
-        TT_PARENTESIS_IZQ, TT_PARENTESIS_DER, TT_CORCHETE_IZQ, TT_CORCHETE_DER, TT_EOF_PASCAL
-        # Importar todos los TT_ que se usarán en las reglas de _consumir
+        TT_PALABRA_RESERVADA, TT_IDENTIFICADOR, TT_EOF_PASCAL, TT_PUNTO_Y_COMA, TT_PUNTO, TT_DOS_PUNTOS,
+        TT_OPERADOR_ASIGNACION, TT_PARENTESIS_IZQ, TT_PARENTESIS_DER, TT_COMA, TT_CORCHETE_IZQ, TT_CORCHETE_DER,
+        TT_NUMERO_ENTERO, TT_NUMERO_REAL, TT_CADENA_LITERAL, TT_OPERADOR_ARITMETICO, TT_OPERADOR_RELACIONAL,
+        TT_ERROR_PASCAL # <-- Importante para errores léxicos
     )
-    # Importar la clase Token si se va a usar para type hinting o inspección
-    from analizador_lexico.lexer_pascal import Token 
+    from analizador_lexico.lexer_pascal import Token
 except ImportError:
     # Fallback simple si hay problemas con la importación (no ideal para producción)
     print("ADVERTENCIA: No se pudieron importar los tipos de token de LexerPascal.")
@@ -170,16 +168,9 @@ class NodoLlamadaProcedimiento(NodoSentencia):
 
     def __repr__(self, indent=0):
         indent_str = "  " * indent
-        if not self.argumentos_nodos:
-            args_repr = "[]"
-        else:
-            # Cada argumento se imprime en una nueva línea con mayor indentación.
-            args_items_repr = "\n".join([arg.__repr__(indent + 2) for arg in self.argumentos_nodos]) # Nivel +2 para argumentos
-            args_repr = f"[\n{args_items_repr}\n{indent_str}  ]" # Cierre del corchete con indentación +1
-        
+        args_repr = "\n".join([arg.__repr__(indent + 1) for arg in self.argumentos_nodos])
         return (f"{indent_str}NodoLlamadaProcedimiento(nombre='{self.nombre_proc_token.lexema}',\n"
-                f"{indent_str}  argumentos={args_repr}\n"
-                f"{indent_str})")
+                f"{indent_str}  argumentos=[\n{args_repr}\n{indent_str}])")
 
 class NodoIf(NodoSentencia):
     """Representa una sentencia condicional if-then-else."""
@@ -312,6 +303,7 @@ class ParserPascal:
         self.posicion_actual = 0
         self.token_actual = self.tokens[self.posicion_actual] if self.tokens else None
         self.errores_sintacticos = []
+        self.errores_lexicos = []  # <-- Nueva lista para errores léxicos
         self.tabla_simbolos = TablaSimbolos()
         # if self.tabla_simbolos.alcances: # Asegurarse que alcances existe y no está vacío
         #     print(f"[DEBUG Parser.__init__] id(self.tabla_simbolos.alcances) = {id(self.tabla_simbolos.alcances)}")
@@ -333,8 +325,16 @@ class ParserPascal:
             self.token_actual = self.tokens[-1] if self.tokens and self.tokens[-1].tipo == TT_EOF_PASCAL else None
 
 
+    def _error_lexico(self, token_error):
+        mensaje = (f"Error Léxico Pascal en L{token_error.linea}:C{token_error.columna}. "
+                   f"Token no válido: '{token_error.lexema}' (tipo: {token_error.tipo}).")
+        self.errores_lexicos.append(mensaje)
+        print(mensaje)
+        raise SyntaxError(mensaje)
+
     def _error_sintactico(self, mensaje_esperado):
-        """Registra un error sintáctico y lanza una excepción para detener el parsing."""
+        if self.token_actual and self.token_actual.tipo == TT_ERROR_PASCAL:
+            self._error_lexico(self.token_actual)
         if self.token_actual and self.token_actual.tipo != TT_EOF_PASCAL:
             mensaje = (f"Error Sintáctico en L{self.token_actual.linea}:C{self.token_actual.columna}. "
                        f"Se esperaba {mensaje_esperado}, pero se encontró '{self.token_actual.lexema}' (tipo: {self.token_actual.tipo}).")
@@ -357,6 +357,9 @@ class ParserPascal:
         Verifica el token actual. Si coincide, lo consume y avanza. Si no, reporta error.
         Devuelve el token consumido o None si no coincide y error_si_no_coincide es False.
         """
+        if self.token_actual and self.token_actual.tipo == TT_ERROR_PASCAL:
+            self._error_lexico(self.token_actual)
+        
         if self.token_actual and self.token_actual.tipo == tipo_token_esperado:
             if lexema_esperado is None or self.token_actual.lexema.lower() == lexema_esperado.lower():
                 token_consumido = self.token_actual
@@ -432,8 +435,6 @@ class ParserPascal:
      
      # Parsea el bloque principal del programa.
      # Este método (parse_bloque) ahora también devolverá un nodo (NodoBloque).
-     # La tabla de símbolos ya tiene un alcance global por defecto al ser creada.
-     # Si tuviéramos procedimientos/funciones, parse_bloque manejaría nuevos alcances.
      bloque_nodo = self.parse_bloque()
      # Si parse_bloque falla y lanza error, no llegaremos aquí. Si devuelve None por otra razón, propagar.
      if not bloque_nodo and not self.errores_sintacticos: # Si no hay errores pero no hay nodo, algo raro pasó
@@ -768,7 +769,7 @@ class ParserPascal:
      # Por ahora, solo permitimos procedimientos conocidos o no verificamos en profundidad.
      # Si tuviéramos una forma de registrar procedimientos en la tabla de símbolos:
      # simbolo_proc = self.tabla_simbolos.buscar_simbolo(token_nombre_proc.lexema)
-     # if simbolo_proc is None o simbolo_proc.get('rol') != 'procedimiento':
+     # if simbolo_proc es None o simbolo_proc.get('rol') != 'procedimiento':
      #     self._error_sintactico(f"Error Semántico: Procedimiento '{token_nombre_proc.lexema}' no declarado.")
      
      argumentos_nodos = []
@@ -793,18 +794,12 @@ class ParserPascal:
         return NodoCuerpoPrograma(lista_nodos_sentencia)
 
     def parse_asignacion(self):
-                # Gramática: asignacion ::= IDENTIFICADOR ":=" expresion
+        # Gramática: asignacion ::= IDENTIFICADOR ":=" expresion
         token_variable = self._consumir(TT_IDENTIFICADOR)
-        simbolo_var = self.tabla_simbolos.buscar_simbolo(token_variable.lexema)
-        if simbolo_var is None:
-            mensaje_error_sem = f"Error Semántico: Variable '{token_variable.lexema}' no declarada (en asignación en L{token_variable.linea}:C{token_variable.columna})."
-            self.errores_sintacticos.append(mensaje_error_sem)
-            raise SyntaxError(mensaje_error_sem)
-
+        # No validar aquí si la variable está declarada, solo construir el nodo
         self._consumir(TT_OPERADOR_ASIGNACION)
         nodo_expresion = self.parse_expresion() # Usa el nuevo parse_expresion de nivel superior
         if not nodo_expresion and self.errores_sintacticos: return None 
-
         return NodoAsignacion(token_variable, nodo_expresion)
 
     def parse_llamada_writeln(self):
@@ -932,11 +927,7 @@ class ParserPascal:
 
         if tipo_actual == TT_IDENTIFICADOR:
             token_id_consumido = self._consumir(TT_IDENTIFICADOR)
-            simbolo = self.tabla_simbolos.buscar_simbolo(token_id_consumido.lexema)
-            if simbolo is None:
-                mensaje_error_sem = f"Error Semántico: Identificador '{token_id_consumido.lexema}' no declarado (usado en L{token_id_consumido.linea}:C{token_id_consumido.columna})."
-                self.errores_sintacticos.append(mensaje_error_sem)
-                raise SyntaxError(mensaje_error_sem)
+            # No validar aquí si el identificador está declarado, solo construir el nodo
             return NodoIdentificador(token_id_consumido)
         
         elif tipo_actual in [TT_NUMERO_ENTERO, TT_NUMERO_REAL, TT_CADENA_LITERAL]:
@@ -1045,14 +1036,7 @@ class ParserPascal:
 
         if tipo_actual == TT_IDENTIFICADOR:
             token_id_consumido = self._consumir(TT_IDENTIFICADOR)
-            simbolo = self.tabla_simbolos.buscar_simbolo(token_id_consumido.lexema)
-            if simbolo is None:
-                mensaje_error_sem = (
-                    f"Error Semántico: Identificador '{token_id_consumido.lexema}' no declarado "
-                    f"(usado en L{token_id_consumido.linea}:C{token_id_consumido.columna})."
-                )
-                self.errores_sintacticos.append(mensaje_error_sem)
-                raise SyntaxError(mensaje_error_sem)
+            # No validar aquí si el identificador está declarado, solo construir el nodo
             return NodoIdentificador(token_id_consumido)
         
         elif tipo_actual in [TT_NUMERO_ENTERO, TT_NUMERO_REAL, TT_CADENA_LITERAL]:

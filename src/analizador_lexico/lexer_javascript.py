@@ -164,6 +164,7 @@ ESPECIFICACIONES_TOKEN_JS = [
     # Identificadores (deben ir después de palabras clave si no se reclasifican,
     # o antes si se reclasifican después). Aquí los ponemos y luego reclasificamos.
     # Un identificador JS puede empezar con letra, $, o _, seguido de esos o números.
+    (r'\$', TT_ERROR_JS),  # Detectar $ solo como error léxico
     (r'[a-zA-Z_$][a-zA-Z0-9_$]*', TT_IDENTIFICADOR),
 
     # Espacios en blanco (se ignorarán pero deben ser consumidos)

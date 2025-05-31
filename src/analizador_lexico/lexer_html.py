@@ -17,6 +17,13 @@ class Token:
                 f"L{self.linea}:C{self.columna}" +
                 (f", V:{valor_repr}" if valor_repr else "") + ")")
 
+    def __str__(self):
+        if self.tipo == 'ERROR_HTML':
+            # Always show a clear, human-friendly error message
+            return f"Error léxico en L{self.linea}:C{self.columna}: {self.valor}"
+        # For other tokens, show a simple summary
+        return f"{self.tipo} ('{self.valor}') en L{self.linea}:C{self.columna}"
+
 # Tipos de Token para HTML
 TT_DOCTYPE = 'DOCTYPE'                 # <!DOCTYPE ...>
 TT_ETIQUETA_APERTURA = 'ETIQUETA_APERTURA' # <nombre_etiqueta

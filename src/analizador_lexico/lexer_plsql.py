@@ -120,7 +120,8 @@ ESPECIFICACIONES_TOKEN_PLSQL = [
 
     # Identificadores (deben ir después de palabras clave y operadores)
     (r'"([a-zA-Z_][a-zA-Z0-9_$#\s]*)"', TT_IDENTIFICADOR_ENTRECOMILLADO_PLSQL),
-    (r'[a-zA-Z_][a-zA-Z0-9_$#]*', TT_IDENTIFICADOR_PLSQL),
+    # Solo letras, dígitos, _ y $ (NO #) para identificadores normales
+    (r'[a-zA-Z_][a-zA-Z0-9_$]*', TT_IDENTIFICADOR_PLSQL),
     
     (r'\s+', TT_WHITESPACE_PLSQL), # Espacios en blanco al final para que no interfieran con otros patrones
 ]

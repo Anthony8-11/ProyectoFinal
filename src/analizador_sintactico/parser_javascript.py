@@ -7,7 +7,8 @@ try:
         TT_OPERADOR_ASIGNACION, TT_OPERADOR_ARITMETICO, TT_OPERADOR_COMPARACION, TT_OPERADOR_LOGICO,
         TT_PUNTO_Y_COMA, TT_COMA, TT_PUNTO,
         TT_PARENTESIS_IZQ, TT_PARENTESIS_DER, TT_LLAVE_IZQ, TT_LLAVE_DER,
-        TT_CORCHETE_IZQ, TT_CORCHETE_DER, TT_EOF_JS, TT_OPERADOR_BITWISE, TT_DOS_PUNTOS_TERNARIO
+        TT_CORCHETE_IZQ, TT_CORCHETE_DER, TT_EOF_JS, TT_OPERADOR_BITWISE, TT_DOS_PUNTOS_TERNARIO,
+        TT_ERROR_JS # <-- Importar el token de error léxico
         # Añadir más tipos de token según se necesiten.
     )
     from analizador_lexico.lexer_javascript import Token # Si se necesita la clase Token
@@ -229,6 +230,7 @@ class ParserJavaScript:
         self.posicion_actual = 0
         self.token_actual = self.tokens[self.posicion_actual] if self.tokens else None
         self.errores_sintacticos = []
+        self.errores_lexicos = []  # <-- Nueva lista para errores léxicos
 
     def _avanzar(self):
         self.posicion_actual += 1
@@ -236,6 +238,13 @@ class ParserJavaScript:
             self.token_actual = self.tokens[self.posicion_actual]
         else:
             self.token_actual = self.tokens[-1] if self.tokens and self.tokens[-1].tipo == TT_EOF_JS else None
+
+    def _error_lexico(self, token_error):
+        mensaje = (f"Error Léxico JS en L{token_error.linea}:C{token_error.columna}. "
+                   f"Token no válido: '{token_error.lexema}' (tipo: {token_error.tipo}).")
+        self.errores_lexicos.append(mensaje)
+        print(mensaje)
+        raise SyntaxError(mensaje)
 
     def _error_sintactico(self, mensaje_esperado):
         mensaje = "Error Sintáctico Desconocido en JavaScript"
@@ -260,6 +269,8 @@ class ParserJavaScript:
 
     def _consumir(self, tipo_token_esperado, lexema_esperado=None):
         token_a_consumir = self.token_actual
+        if token_a_consumir and token_a_consumir.tipo == TT_ERROR_JS:
+            self._error_lexico(token_a_consumir)
         if token_a_consumir and token_a_consumir.tipo == tipo_token_esperado:
             if lexema_esperado is None or token_a_consumir.lexema == lexema_esperado: # JS es sensible a mayúsculas
                 self._avanzar()
@@ -710,7 +721,8 @@ class ParserJavaScript:
         token = self.token_actual
         if token is None:
             self._error_sintactico("una expresión primaria (identificador, literal, etc.)")
-
+        if token.tipo == TT_ERROR_JS:
+            self._error_lexico(token)
         if token.tipo == TT_IDENTIFICADOR:
             if token.lexema in ['true', 'false', 'null', 'undefined']:
                 consumido = self._consumir(TT_IDENTIFICADOR)

@@ -1,16 +1,26 @@
 # src/simulador_ejecucion/interprete_python.py
 import re 
+import src.analizador_sintactico
+try:
+    from src.detector_lenguaje.detector import detectar_lenguaje
+except ImportError as e:
+    print(f"Error de Importación Específico: {e}")
+    try:
+        from detector_lenguaje.detector import detectar_lenguaje
+    except ImportError as e2:
+        print(f"Error de Importación Alternativo: {e2}")
+        # Aquí podrías manejar el error de importación de manera más robusta si es necesario
 
 # Importar los nodos AST del parser de Python
 try:
-    from analizador_sintactico.parser_python import (
+    from src.analizador_sintactico.parser_python import (
         NodoModulo, NodoSentencia, NodoExpresion, NodoDefinicionFuncion,
         NodoBloque, NodoSentenciaExpresion, NodoAsignacion, NodoLlamadaFuncion,
         NodoIdentificador, NodoLiteral, NodoExpresionBinaria, NodoSentenciaIf,
         NodoSentenciaReturn, NodoSentenciaWhile, NodoSentenciaFor, 
         NodoExpresionUnaria, NodoSentenciaBreak, NodoSentenciaContinue 
     )
-    from analizador_lexico.lexer_python import Token, TT_CADENA, TT_OPERADOR, TT_PALABRA_CLAVE 
+    from src.analizador_lexico.lexer_python import Token, TT_CADENA, TT_OPERADOR, TT_PALABRA_CLAVE 
 except ImportError as e_ip_py:
     print(f"Error de importación en interprete_python.py: {e_ip_py}")
     class NodoModulo: pass; 

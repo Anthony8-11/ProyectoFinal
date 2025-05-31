@@ -47,13 +47,17 @@ class AnalizadorSemanticoPascal:
             self.tabla_variables[nombre] = tipo
 
     def _analizar_cuerpo(self, nodo_cuerpo):
-        for stmt in getattr(nodo_cuerpo, 'sentencias', []):
+        print(f"[DEBUG] _analizar_cuerpo: nodo_cuerpo type = {type(nodo_cuerpo).__name__}")
+        print(f"[DEBUG] dir(nodo_cuerpo): {dir(nodo_cuerpo)}")
+        print(f"[DEBUG] getattr(nodo_cuerpo, 'lista_sentencias_nodos', None): {getattr(nodo_cuerpo, 'lista_sentencias_nodos', None)}")
+        for stmt in getattr(nodo_cuerpo, 'lista_sentencias_nodos', []):
             self._analizar_sentencia(stmt)
 
     def _analizar_sentencia(self, nodo_stmt):
         if nodo_stmt is None:
             return
         tipo = type(nodo_stmt).__name__
+        print(f"[DEBUG] _analizar_sentencia: tipo nodo = {tipo}")
         if tipo == 'NodoAsignacion':
             self._analizar_asignacion(nodo_stmt)
         elif tipo == 'NodoIf':
@@ -76,10 +80,64 @@ class AnalizadorSemanticoPascal:
         else:
             self.errores.append(f"Sentencia no soportada: {tipo}")
 
+    def _inferir_tipo_expresion(self, nodo_expr):
+        print(f"[DEBUG] _inferir_tipo_expresion: llamado con nodo {type(nodo_expr).__name__} -> {getattr(nodo_expr, 'nombre', getattr(nodo_expr, 'literal_token', None))}")
+        """
+        Infer the type of an expression node. Returns a string (e.g., 'integer', 'real', 'string', 'boolean', 'char') or None if unknown.
+        """
+        if nodo_expr is None:
+            return None
+        tipo = type(nodo_expr).__name__
+        if tipo == 'NodoLiteral':
+            token = nodo_expr.literal_token
+            if token.tipo == 'NUMERO_ENTERO':
+                return 'integer'
+            elif token.tipo == 'NUMERO_REAL':
+                return 'real'
+            elif token.tipo == 'CADENA_LITERAL':
+                return 'string'
+            elif token.tipo == 'PALABRA_RESERVADA' and str(token.lexema).lower() in ['true', 'false']:
+                return 'boolean'
+        elif tipo == 'NodoIdentificador':
+            nombre = nodo_expr.nombre.lower()  # <--- CORREGIDO: antes era nodo_expr.token.lexema.lower() o similar
+            tipo_en_tabla = self.tabla_variables.get(nombre)
+            print(f"[DEBUG] _inferir_tipo_expresion: identificador '{nombre}' tiene tipo '{tipo_en_tabla}' en tabla_variables")
+            return tipo_en_tabla
+        elif tipo == 'NodoExpresionBinaria':
+            tipo_izq = self._inferir_tipo_expresion(nodo_expr.operando_izq_nodo)
+            tipo_der = self._inferir_tipo_expresion(nodo_expr.operando_der_nodo)
+            op = nodo_expr.operador_token.lexema.lower()
+            if op in ['+', '-', '*', '/', 'div', 'mod']:
+                if tipo_izq == 'real' or tipo_der == 'real':
+                    return 'real'
+                elif tipo_izq == 'integer' and tipo_der == 'integer':
+                    return 'integer'
+                else:
+                    return None
+            elif op in ['and', 'or']:
+                return 'boolean'
+            elif op in ['=', '<>', '<', '>', '<=', '>=']:
+                return 'boolean'
+        elif tipo == 'NodoExpresionUnaria':
+            op = nodo_expr.operador_token.lexema.lower()
+            if op == 'not':
+                return 'boolean'
+            return self._inferir_tipo_expresion(nodo_expr.operando_nodo)
+        return None
+
     def _analizar_asignacion(self, nodo):
-        nombre = nodo.identificador_token.lexema.lower()
+        nombre = nodo.variable_token_id.lexema.lower()
+        print(f"[DEBUG] tabla_variables: {self.tabla_variables}")
+        print(f"[DEBUG] Analizando asignación a '{nombre}'")
+        print(f"[DEBUG] nodo.expresion_nodo: {nodo.expresion_nodo} (type: {type(nodo.expresion_nodo).__name__})")
         if nombre not in self.tabla_variables:
             self.errores.append(f"Variable '{nombre}' no declarada antes de asignación.")
+        tipo_var = self.tabla_variables.get(nombre)
+        tipo_expr = self._inferir_tipo_expresion(nodo.expresion_nodo)
+        print(f"[DEBUG] Tipo variable: {tipo_var}, Tipo expresión: {tipo_expr}")
+        print(f"[DEBUG] (ASIGNACION) variable '{nombre}' tipo '{tipo_var}', expresión tipo '{tipo_expr}'")
+        if tipo_var and tipo_expr and tipo_var != tipo_expr:
+            self.errores.append(f"Incompatibilidad de tipos en asignación a '{nombre}': se esperaba '{tipo_var}', se obtuvo '{tipo_expr}'.")
         self._analizar_expresion(nodo.expresion_nodo)
 
     def _analizar_if(self, nodo):
@@ -106,9 +164,9 @@ class AnalizadorSemanticoPascal:
         self._analizar_expresion(nodo.condicion_nodo)
 
     def _analizar_llamada_procedimiento(self, nodo):
-        nombre = nodo.nombre_token.lexema.lower()
+        nombre = nodo.nombre_proc_token.lexema.lower()
         # Aquí podrías validar existencia y parámetros si tienes tabla_procedimientos
-        for arg in getattr(nodo, 'argumentos', []):
+        for arg in getattr(nodo, 'argumentos_nodos', []):
             self._analizar_expresion(arg)
 
     def _analizar_expresion(self, nodo_expr):
@@ -118,7 +176,7 @@ class AnalizadorSemanticoPascal:
         if tipo == 'NodoLiteral':
             pass
         elif tipo == 'NodoIdentificador':
-            nombre = nodo_expr.token.lexema.lower()
+            nombre = nodo_expr.nombre.lower()  # <--- CORREGIDO: antes era nodo_expr.token.lexema.lower()
             if nombre not in self.tabla_variables and nombre not in self.tabla_constantes:
                 self.errores.append(f"Identificador '{nombre}' no declarado.")
         elif tipo == 'NodoExpresionBinaria':

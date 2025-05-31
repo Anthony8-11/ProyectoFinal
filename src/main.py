@@ -4,12 +4,12 @@ import sys
 from datetime import datetime
 import pytz
 
-from simulador_ejecucion.interprete_python import ErrorTiempoEjecucionPython, ValorRetorno # Para la fecha/hora
+from src.simulador_ejecucion.interprete_python import ErrorTiempoEjecucionPython, ValorRetorno # Para la fecha/hora
 
 # --- CONTROL DE CONFIGURACIÓN PARA PRUEBAS ---
 # Para probar un solo archivo, pon su nombre aquí (ej. "prueba_pascal.pas").
 # Si es None, se probarán todos los archivos en la lista archivos_a_probar.
-ARCHIVO_ESPECIFICO_A_PROBAR = "prueba_plsql.sql" # Ejemplo para probar solo Python
+ARCHIVO_ESPECIFICO_A_PROBAR = "prueba_pascal_tipo_invalido.pas" # Ejemplo para probar solo Python
 # ARCHIVO_ESPECIFICO_A_PROBAR = "prueba_tsql.sql" # Ejemplo para probar solo T-SQL
 # ARCHIVO_ESPECIFICO_A_PROBAR = "prueba_pascal.pas" # Ejemplo para probar solo Pascal
 
@@ -25,7 +25,7 @@ try:
     # IMPORTACIÓN PARA PYTHON ---
     from analizador_lexico.lexer_python import LexerPython, TT_ERROR_LEXICO as TT_ERROR_PYTHON, TT_EOF as TT_EOF_PYTHON, TT_INDENT, TT_DEDENT, TT_NUEVA_LINEA
     from analizador_sintactico.parser_python import ParserPython #PYTHON
-    from simulador_ejecucion.interprete_python import InterpretePython #PYTHON
+    from src.simulador_ejecucion.interprete_python import InterpretePython #PYTHON
     # IMPORTACIÓN PARA HTML ---
     from analizador_lexico.lexer_html import LexerHTML, TT_ERROR_HTML, TT_EOF_HTML #HTML
     from analizador_sintactico.parser_html import ParserHTML #HTML
@@ -33,11 +33,11 @@ try:
     # IMPORTACIÓN PARA PASCAL ---
     from analizador_lexico.lexer_pascal import LexerPascal, TT_ERROR_PASCAL, TT_EOF_PASCAL #PASCAL
     from analizador_sintactico.parser_pascal import ParserPascal #PASCAL
-    from simulador_ejecucion.interprete_pascal import InterpretePascal #PASCAL
+    from src.simulador_ejecucion.interprete_pascal import InterpretePascal #PASCAL
     # IMPORTACIÓN PARA T-SQL ---
     from analizador_lexico.lexer_tsql import LexerTSQL, TT_ERROR_SQL, TT_EOF_SQL #Tsql
     from analizador_sintactico.parser_tsql import ParserTSQL #Tsql
-    from simulador_ejecucion.interprete_tsql import InterpreteTSQL #T_SQL
+    from src.simulador_ejecucion.interprete_tsql import InterpreteTSQL #T_SQL
     # IMPORTACIÓN PARA JAVASCRIPT ---
     from analizador_lexico.lexer_javascript import LexerJavaScript, TT_ERROR_JS, TT_EOF_JS #JAVASCRIPT
     from analizador_sintactico.parser_javascript import ParserJavaScript #JAVASCRIPT
@@ -45,11 +45,11 @@ try:
     # IMPORTACIÓN PARA C++ ---
     from analizador_lexico.lexer_cpp import LexerCPP, TT_ERROR_CPP, TT_EOF_CPP
     from analizador_sintactico.parser_cpp import ParserCPP
-    from simulador_ejecucion.interprete_cpp import InterpreteCPP
+    from src.simulador_ejecucion.interprete_cpp import InterpreteCPP
     # IMPORTACION PARA PL/SQL ---
     from analizador_lexico.lexer_plsql import LexerPLSQL, TT_ERROR_PLSQL, TT_EOF_PLSQL
     from analizador_sintactico.parser_plsql import ParserPLSQL
-    from simulador_ejecucion.interprete_plsql import InterpretePLSQL
+    from src.simulador_ejecucion.interprete_plsql import InterpretePLSQL
 
     # --- NUEVA IMPORTACIÓN PARA ANALIZADOR SEMÁNTICO PYTHON ---
     from analizador_semantico.semantico_python import AnalizadorSemanticoPython

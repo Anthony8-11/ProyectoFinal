@@ -361,7 +361,7 @@ class MainWindow(QWidget):
             elif lenguaje == "PL/SQL":
                 lexer = LexerPLSQL(codigo)
                 tokens = lexer.tokenizar()
-                errores_lex = [t for t in tokens if t.tipo == 'ERROR_LEXICO']
+                errores_lex = [t for t in tokens if getattr(t, 'tipo', None) in ('ERROR_PLSQL', 'ERROR_LEXICO')]
             elif lenguaje == "JavaScript":
                 lexer = LexerJavaScript(codigo)
                 tokens = lexer.tokenizar()
@@ -419,6 +419,12 @@ class MainWindow(QWidget):
                 ast = None
                 errores_sint = ["No se pudo instanciar el parser para este lenguaje."]
             self.ast = ast  # Guardar AST para el botón
+            # --- INICIO PARCHE: Unificar errores léxicos del parser (errores_lexicos) con los del lexer (errores_lex) ---
+            if parser and hasattr(parser, 'errores_lexicos') and parser.errores_lexicos:
+                for err in parser.errores_lexicos:
+                    if err not in errores_lex:
+                        errores_lex.append(err)
+            # --- FIN PARCHE ---
         except Exception as e:
             # Si ya hay errores_sint, los acumulamos, si no, creamos la lista
             if 'errores_sint' in locals() and isinstance(errores_sint, list):
@@ -552,23 +558,25 @@ class MainWindow(QWidget):
                 resultado_html += "<span style='color:#ff1744'>Errores léxicos encontrados:</span>"
                 resultado_html += "<ol style='color:#ff5252'>" + "".join(f"<li>{str(e)}</li>" for e in errores_lex) + "</ol>"
             # Tokens destacados
-            def colorear_token_html(token):
-                if token.tipo == 'ETIQUETA_APERTURA':
-                    return f"<span style='color:#4fc3f7;font-weight:bold'>&lt;{token.valor}&gt;</span>"
-                if token.tipo == 'ETIQUETA_CIERRE':
-                    return f"<span style='color:#ffb300;font-weight:bold'>&lt;/{token.valor}&gt;</span>"
-                if token.tipo == 'ATRIBUTO':
-                    return f"<span style='color:#ffd54f'>{token.valor}</span>"
-                if token.tipo == 'VALOR':
-                    return f"<span style='color:#81c784'>'{token.valor}'</span>"
-                if token.tipo == 'TEXTO':
-                    return f"<span style='color:#fff'>{token.valor}</span>"
-                if token.tipo == 'ERROR_HTML':
-                    return f"<span style='color:#ff1744;background:#fff2;border-radius:4px;padding:1px 4px;'>{token.valor}</span>"
-                return f"<span style='color:#b0bec5'>{token.valor}</span>"
-            tokens_html = " ".join(colorear_token_html(t) for t in tokens)
-            resultado_html += f"<span style='color:#b0bec5'>Tokens generados: {len(tokens)}</span><br>"
-            resultado_html += f"<div style='background:#e3e6ed;border-radius:8px;padding:8px;margin:8px 0 12px 0;word-break:break-all;color:#23262e;'>{tokens_html}</div>"
+            tokens_html = ""
+            if not errores_lex:  # Only show token visualization if there are no lexical errors
+                def colorear_token_html(token):
+                    if token.tipo == 'ETIQUETA_APERTURA':
+                        return f"<span style='color:#4fc3f7;font-weight:bold'>&lt;{token.valor}&gt;</span>"
+                    if token.tipo == 'ETIQUETA_CIERRE':
+                        return f"<span style='color:#ffb300;font-weight:bold'>&lt;/{token.valor}&gt;</span>"
+                    if token.tipo == 'ATRIBUTO':
+                        return f"<span style='color:#ffd54f'>{token.valor}</span>"
+                    if token.tipo == 'VALOR':
+                        return f"<span style='color:#81c784'>'{token.valor}'</span>"
+                    if token.tipo == 'TEXTO':
+                        return f"<span style='color:#fff'>{token.valor}</span>"
+                    if token.tipo == 'ERROR_HTML':
+                        return f"<span style='color:#ff5252;background:#2d1e1e;padding:2px 6px;border-radius:4px;'>{str(token)}</span>"
+                    return f"<span style='color:#b0bec5'>{token.valor}</span>"
+                tokens_html = " ".join(colorear_token_html(t) for t in tokens)
+                resultado_html += f"<span style='color:#b0bec5'>Tokens generados: {len(tokens)}</span><br>"
+                resultado_html += f"<div style='background:#e3e6ed;border-radius:8px;padding:8px;margin:8px 0 12px 0;word-break:break-all;color:#23262e;'>{tokens_html}</div>"
             resultado_html += "<hr style='border:1px solid #7c4dff;'><b style='color:#7c4dff'>Análisis sintáctico:</b><br>"
             resultado_html += f"<span style='color:{'#ff1744' if errores_sint else '#00e676'};font-weight:bold'>{' ' if errores_sint else 'Sin errores sintácticos.'}</span><br>"
             if errores_sint:
@@ -590,7 +598,7 @@ class MainWindow(QWidget):
                     resultado_html += "</div>"
                     # Mostrar el HTML fuente generado
                     resultado_html += "<b style='color:#b0bec5;'>HTML generado:</b><br>"
-                    resultado_html += f"<pre style='background:#23242b;border-radius:6px;padding:8px;color:#ffd54f;white-space:pre-wrap;word-break:break-all;max-height:120px;overflow:auto;'>{self.editor.toPlainText()}</pre>"
+                    resultado_html += f"<div style='background:#23242b;border-radius:6px;padding:8px;color:#ffd54f;white-space:pre-wrap;word-break:break-all;max-height:120px;overflow:auto;'>{self.editor.toPlainText()}</div>"
                 else:
                     resultado_html += "<span style='color:#b0bec5'>(No se generó salida HTML)</span><br>"
             resultado_html += "</div>"
@@ -613,46 +621,48 @@ class MainWindow(QWidget):
             if errores_lex:
                 resultado_html += "<span style='color:#ff1744'>Errores léxicos encontrados:</span>"
                 resultado_html += "<ol style='color:#ff5252'>" + "".join(f"<li>{str(e)}</li>" for e in errores_lex) + "</ol>"
-            # Mostrar tokens HTML resaltados
-            resultado_html += f"<span style='color:#b0bec5'>Tokens generados: {len(tokens)}</span><br>"
-            if tokens:
-                resultado_html += "<div style='margin:6px 0 10px 0; padding:6px; background:#23242b; border-radius:6px; border:1px solid #444; max-height:120px; overflow:auto; font-size:13px;'>"
-                for t in tokens:
-                    if t.tipo == 'TEXTO':
-                        resultado_html += f"<span style='color:#ffd54f;'>&lt;TEXTO&gt; '{t.valor}'</span>  "
-                    elif t.tipo == 'ETIQUETA_APERTURA':
-                        resultado_html += f"<span style='color:#81c784;'>&lt;{t.valor}&gt;</span>  "
-                    elif t.tipo == 'ETIQUETA_CIERRE':
-                        resultado_html += f"<span style='color:#e57373;'>&lt;/{t.valor}&gt;</span>  "
-                    elif t.tipo == 'ATRIBUTO':
-                        resultado_html += f"<span style='color:#4fc3f7;'>{t.valor}</span>  "
-                    elif t.tipo == 'VALOR_ATRIBUTO':
-                        resultado_html += f"<span style='color:#ffd54f;'>'{t.valor}'</span>  "
-                    elif t.tipo == 'COMENTARIO':
-                        resultado_html += f"<span style='color:#bdbdbd;'>&lt;!--{t.valor}--&gt;</span>  "
-                    elif t.tipo == 'ERROR_HTML':
-                        resultado_html += f"<span style='color:#ff5252;background:#2d1e1e;padding:2px 6px;border-radius:4px;'>&lt;Error&gt; {t.valor}</span>  "
-                    else:
-                        resultado_html += f"<span style='color:#b0bec5;'>{t.tipo}: '{t.valor}'</span>  "
-                resultado_html += "</div>"
+            # Tokens destacados
+            tokens_html = ""
+            if not errores_lex:  # Only show token visualization if there are no lexical errors
+                def colorear_token_html(token):
+                    if token.tipo == 'ETIQUETA_APERTURA':
+                        return f"<span style='color:#4fc3f7;font-weight:bold'>&lt;{token.valor}&gt;</span>"
+                    if token.tipo == 'ETIQUETA_CIERRE':
+                        return f"<span style='color:#ffb300;font-weight:bold'>&lt;/{token.valor}&gt;</span>"
+                    if token.tipo == 'ATRIBUTO':
+                        return f"<span style='color:#ffd54f'>{token.valor}</span>"
+                    if token.tipo == 'VALOR':
+                        return f"<span style='color:#81c784'>'{token.valor}'</span>"
+                    if token.tipo == 'TEXTO':
+                        return f"<span style='color:#fff'>{token.valor}</span>"
+                    if token.tipo == 'ERROR_HTML':
+                        return f"<span style='color:#ff5252;background:#2d1e1e;padding:2px 6px;border-radius:4px;'>{str(token)}</span>"
+                    return f"<span style='color:#b0bec5'>{token.valor}</span>"
+                tokens_html = " ".join(colorear_token_html(t) for t in tokens)
+                resultado_html += f"<span style='color:#b0bec5'>Tokens generados: {len(tokens)}</span><br>"
+                resultado_html += f"<div style='background:#e3e6ed;border-radius:8px;padding:8px;margin:8px 0 12px 0;word-break:break-all;color:#23262e;'>{tokens_html}</div>"
             resultado_html += "<hr style='border:1px solid #7c4dff;'><b style='color:#7c4dff'>Análisis sintáctico:</b><br>"
             resultado_html += f"<span style='color:{'#ff1744' if errores_sint else '#00e676'};font-weight:bold'>{' ' if errores_sint else 'Sin errores sintácticos.'}</span><br>"
             if errores_sint:
                 resultado_html += "<span style='color:#ff1744'>Errores sintácticos encontrados:</span>"
                 resultado_html += "<ol style='color:#ff5252'>" + "".join(f"<li>{str(e)}</li>" for e in errores_sint) + "</ol>"
             resultado_html += "<hr style='border:1px solid #ffb300;'><b style='color:#ffb300'>Análisis semántico:</b><br>"
-            resultado_html += "<span style='color:#b0bec5'>(Análisis semántico no implementado en este ejemplo)</span><br>"
+            if errores_sem:
+                resultado_html += "<span style='color:#ff1744'>Errores semánticos encontrados:</span>"
+                resultado_html += "<ol style='color:#ff5252'>" + "".join(f"<li>{str(e)}</li>" for e in errores_sem) + "</ol>"
+            else:
+                resultado_html += "<span style='color:#00e676'>Sin errores semánticos.</span><br>"
             if not errores_lex and not errores_sint and ast:
-                resultado_html += "<hr style='border:1px solid #00bfae;'><b style='color:#00bfae'>Simulación/Visualización HTML:</b><br>"
-                if salida_ejecucion.strip():
-                    # Vista previa renderizada
-                    resultado_html += "<div style='margin:10px 0 16px 0; padding:10px; background:linear-gradient(90deg,#23262e 60%,#ffd54f22 100%); border-radius:8px; border:1.5px solid #ffd54f;'>"
+                resultado_html += "<hr style='border:1px solid #00bfae;'><b style='color:#00bfae'>Visualización HTML:</b><br>"
+                if salida_ejecucion:
+                    # Vista previa renderizada (fondo claro para mejor legibilidad)
+                    resultado_html += "<div style='margin:12px 0 8px 0;padding:8px;background:#fff;border-radius:8px;box-shadow:0 2px 8px #0003;border:1.5px solid #ffd54f;'>"
                     resultado_html += "<b style='color:#ffd54f;'>Vista previa:</b><br>"
                     resultado_html += f"<div style='background:#fff;border-radius:6px;padding:10px;margin:8px 0;box-shadow:0 2px 8px #ffd54f44; color:#23262e; min-height:30px;max-height:200px;overflow:auto;'>{salida_ejecucion}</div>"
                     resultado_html += "</div>"
                     # Mostrar el HTML fuente generado
                     resultado_html += "<b style='color:#b0bec5;'>HTML generado:</b><br>"
-                    resultado_html += f"<pre style='background:#23242b;border-radius:6px;padding:8px;color:#ffd54f;white-space:pre-wrap;word-break:break-all;max-height:120px;overflow:auto;'>{self.editor.toPlainText()}</pre>"
+                    resultado_html += f"<div style='background:#23242b;border-radius:6px;padding:8px;color:#ffd54f;white-space:pre-wrap;word-break:break-all;max-height:120px;overflow:auto;'>{self.editor.toPlainText()}</div>"
                 else:
                     resultado_html += "<span style='color:#b0bec5'>(No se generó salida HTML)</span><br>"
             resultado_html += "</div>"
